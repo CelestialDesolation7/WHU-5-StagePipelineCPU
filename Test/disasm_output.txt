@@ -1,0 +1,63 @@
+addi	sp, zero, 0x87
+slli	sp, sp, 8
+addi	sp, sp, 0x65
+slli	sp, sp, 0x10
+addi	gp, zero, 0x43
+slli	gp, gp, 8
+addi	gp, gp, 0x21
+add	sp, sp, gp
+sw	sp, 0(zero)
+addi	a1, zero, 8
+lw	a5, 0(zero)
+add	sp, zero, zero
+addi	tp, zero, 0xf
+and	t2, a5, tp
+slli	s1, sp, 2
+srl	t2, t2, s1
+slli	t0, tp, 4
+add	a2, sp, zero
+add	a3, t2, zero
+addi	gp, sp, 1
+beq	gp, a1, 0x2c
+and	s0, a5, t0
+slli	a0, gp, 2
+srl	s0, s0, a0
+slt	a4, a3, s0
+beqz	a4, 0xc
+add	a3, s0, zero
+add	a2, gp, zero
+slli	t0, t0, 4
+addi	gp, gp, 1
+j	-0x28
+slt	a4, sp, a2
+beqz	a4, 8
+jal	0x4c
+slli	tp, tp, 4
+addi	sp, sp, 1
+bne	sp, a1, -0x5c
+sw	a5, 4(zero)
+addi	sp, zero, 0xff
+slli	sp, sp, 8
+addi	sp, sp, 0xff
+slli	sp, sp, 0x10
+ori	ra, sp, 4
+ori	sp, sp, 0xc
+lw	t0, 0(ra)
+andi	t0, t0, 0x100
+beqz	t0, 0xc
+lw	gp, 4(zero)
+j	8
+lw	gp, 0(zero)
+sw	gp, 0(sp)
+j	-0x1c
+addi	t0, zero, 0xf
+slli	a0, a2, 2
+sll	t0, t0, a0
+or	t1, tp, t0
+not	t1, t1
+and	a5, a5, t1
+sll	s0, a3, s1
+or	a5, a5, s0
+sll	t2, t2, a0
+or	a5, a5, t2
+ret	

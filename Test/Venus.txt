@@ -1,0 +1,64 @@
+PC	Machine Code	Basic Code	Original Code
+0x87654321	Invalid Instruction	Invalid Instruction	addi sp, zero, 0x87
+0x4	0x00811113	slli x2 x2 8	slli sp, sp, 8
+0x8	0x06510113	addi x2 x2 101	addi sp, sp, 0x65
+0xc	0x01011113	slli x2 x2 16	slli sp, sp, 0x10
+0x10	0x04300193	addi x3 x0 67	addi gp, zero, 0x43
+0x14	0x00819193	slli x3 x3 8	slli gp, gp, 8
+0x18	0x02118193	addi x3 x3 33	addi gp, gp, 0x21
+0x1c	0x00310133	add x2 x2 x3	add sp, sp, gp
+0x20	0x00202023	sw x2 0(x0)	sw sp, 0(zero)
+0x24	0x00800593	addi x11 x0 8	addi a1, zero, 8
+0x28	0x00002783	lw x15 0(x0)	lw a5, 0(zero)
+0x2c	0x00000133	add x2 x0 x0	add sp, zero, zero
+0x30	0x00F00213	addi x4 x0 15	addi tp, zero, 0xf
+0x34	0x0047F3B3	and x7 x15 x4	and t2, a5, tp
+0x38	0x00211493	slli x9 x2 2	slli s1, sp, 2
+0x3c	0x0093D3B3	srl x7 x7 x9	srl t2, t2, s1
+0x40	0x00421293	slli x5 x4 4	slli t0, tp, 4
+0x44	0x00010633	add x12 x2 x0	add a2, sp, zero
+0x48	0x000386B3	add x13 x7 x0	add a3, t2, zero
+0x4c	0x00110193	addi x3 x2 1	addi gp, sp, 1
+0x50	0x02B18663	beq x3 x11 44	beq gp, a1, 0x2c
+0x54	0x0057F433	and x8 x15 x5	and s0, a5, t0
+0x58	0x00219513	slli x10 x3 2	slli a0, gp, 2
+0x5c	0x00A45433	srl x8 x8 x10	srl s0, s0, a0
+0x60	0x0086A733	slt x14 x13 x8	slt a4, a3, s0
+0x64	0x00070663	beq x14 x0 12	beqz a4, 0xc
+0x68	0x000406B3	add x13 x8 x0	add a3, s0, zero
+0x6c	0x00018633	add x12 x3 x0	add a2, gp, zero
+0x70	0x00429293	slli x5 x5 4	slli t0, t0, 4
+0x74	0x00118193	addi x3 x3 1	addi gp, gp, 1
+0x78	0xFD9FF06F	jal x0 -40	j -0x28
+0x7c	0x00C12733	slt x14 x2 x12	slt a4, sp, a2
+0x80	0x00070463	beq x14 x0 8	beqz a4, 8
+0x84	0x04C000EF	jal x1 76	jal 0x4c
+0x88	0x00421213	slli x4 x4 4	slli tp, tp, 4
+0x8c	0x00110113	addi x2 x2 1	addi sp, sp, 1
+0x90	0xFAB112E3	bne x2 x11 -92	bne sp, a1, -0x5c
+0x94	0x00F02223	sw x15 4(x0)	sw a5, 4(zero)
+0x98	0x0FF00113	addi x2 x0 255	addi sp, zero, 0xff
+0x9c	0x00811113	slli x2 x2 8	slli sp, sp, 8
+0xa0	0x0FF10113	addi x2 x2 255	addi sp, sp, 0xff
+0xa4	0x01011113	slli x2 x2 16	slli sp, sp, 0x10
+0xa8	0x00416093	ori x1 x2 4	ori ra, sp, 4
+0xac	0x00C16113	ori x2 x2 12	ori sp, sp, 0xc
+0xb0	0x0000A283	lw x5 0(x1)	lw t0, 0(ra)
+0xb4	0x1002F293	andi x5 x5 256	andi t0, t0, 0x100
+0xb8	0x00028663	beq x5 x0 12	beqz t0, 0xc
+0xbc	0x00402183	lw x3 4(x0)	lw gp, 4(zero)
+0xc0	0x0080006F	jal x0 8	j 8
+0xc4	0x00002183	lw x3 0(x0)	lw gp, 0(zero)
+0xc8	0x00312023	sw x3 0(x2)	sw gp, 0(sp)
+0xcc	0xFE5FF06F	jal x0 -28	j -0x1c
+0xd0	0x00F00293	addi x5 x0 15	addi t0, zero, 0xf
+0xd4	0x00261513	slli x10 x12 2	slli a0, a2, 2
+0xd8	0x00A292B3	sll x5 x5 x10	sll t0, t0, a0
+0xdc	0x00526333	or x6 x4 x5	or t1, tp, t0
+0xe0	0xFFF34313	xori x6 x6 -1	not t1, t1
+0xe4	0x0067F7B3	and x15 x15 x6	and a5, a5, t1
+0xe8	0x00969433	sll x8 x13 x9	sll s0, a3, s1
+0xec	0x0087E7B3	or x15 x15 x8	or a5, a5, s0
+0xf0	0x00A393B3	sll x7 x7 x10	sll t2, t2, a0
+0xf4	0x0077E7B3	or x15 x15 x7	or a5, a5, t2
+0xf8	0x00008067	jalr x0 x1 0	ret
