@@ -3,7 +3,7 @@
 module ctrl(input  [6:0] Op,       // opcode
             input  [6:0] Funct7,    // funct7
             input  [2:0] Funct3,    // funct3
-            input        Zero,
+            input        Zero,      // ALU Zero flag
             
             output       RegWrite, // control signal for register write
             output       MemWrite, // control signal for memory write
@@ -72,7 +72,7 @@ module ctrl(input  [6:0] Op,       // opcode
    wire sra      = op & (Funct3 == `FUNCT3_SRA) & (Funct7 == `FUNCT7_SRA);
    wire or_op    = op & (Funct3 == `FUNCT3_OR);
    wire and_op   = op & (Funct3 == `FUNCT3_AND);
-
+   
    // instruction type encoding ends
    // ------------------------------------------------------------
    
@@ -97,18 +97,31 @@ module ctrl(input  [6:0] Op,       // opcode
    assign WDSel[1] = jal | jalr;
    assign WDSel[0] = load;
    
-   // Next PC operation
+   // Next PC operation - 分支判断将在EX阶段进行
    assign NPCOp[2] = jalr;
    assign NPCOp[1] = jal;
-   assign NPCOp[0] = (beq & Zero) | (bne & ~Zero) | (blt & ~Zero) | (bge & Zero) | (bltu & ~Zero) | (bgeu & Zero);
+   assign NPCOp[0] = 1'b0; // 分支指令在ID阶段不跳转，在EX阶段决定
    
    // ALU operation encoding
-   assign ALUOp[4] = lui | auipc;
-   assign ALUOp[3] = (addi | add) | (slti | slt) | (sltiu | sltu) | (xori | xor_op) | (ori | or_op) | (andi | and_op);
-   assign ALUOp[2] = (slli | sll) | (srli | srl) | (srai | sra) | (xori | xor_op) | (ori | or_op) | (andi | and_op);
-   assign ALUOp[1] = (sub | srl | sra) | (slti | slt) | (sltiu | sltu) | (xori | xor_op) | (ori | or_op) | (andi | and_op) | (beq | bne) | (blt | bge) | (bltu | bgeu);
-   assign ALUOp[0] = (addi | add) | (sub) | (slti | slt) | (sltiu | sltu) | (xori | xor_op) | (ori | or_op) | (andi | and_op) | (slli | sll) | (srli | srl) | (srai | sra) | (load | store) | jalr;
-   
+   assign ALUOp = (beq) ? `ALU_BEQ :
+                (bne) ? `ALU_BNE :
+                (blt) ? `ALU_BLT :
+                (bge) ? `ALU_BGE :
+                (bltu) ? `ALU_BLTU :
+                (bgeu) ? `ALU_BGEU :
+                (lui) ? `ALU_LUI :
+                (auipc) ? `ALU_AUIPC :
+                (addi | add | load | store | jalr) ? `ALU_ADD :
+                (sub) ? `ALU_SUB :
+                (slti | slt) ? `ALU_SLT :
+                (sltiu | sltu) ? `ALU_SLTU :
+                (xori | xor_op) ? `ALU_XOR :
+                (ori | or_op) ? `ALU_OR :
+                (andi | and_op) ? `ALU_AND :
+                (slli | sll) ? `ALU_SLL :
+                (srli | srl) ? `ALU_SRL :
+                (srai | sra) ? `ALU_SRA : `ALU_NOP;
+
    // Data memory access type
    assign DMType[2] = lbu | lhu;
    assign DMType[1] = lh | lhu | sh;

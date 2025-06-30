@@ -9,7 +9,7 @@ Fuck\ The\ School\ of\ Computer\ Science\bf{\textit{！}}\\
 
 Fuck\ The\ Wuhan\ University\ Management\ Layer\bf{\textit{！}}\\
 
-\textit{有用的话给Arielle点个Star谢谢喵}
+\textit{有用的话给Arielle点个Star谢谢喵}\bf{\textit{！}}
 $$
 
 模块的包含结构如下：
@@ -112,9 +112,6 @@ endmodule
 
 
 ```verilog
-// IF stage
-    PC pc_unit(.clk(clk), .rst(rst), .NPC(NPC_IF), .PC(PC_IF));
-    
     // 修改NPC连接：JAL指令在ID阶段生效，JALR指令在EX阶段生效，其他跳转在EX阶段生效
     wire [2:0] npc_op_sel;
     wire [31:0] npc_imm_sel;

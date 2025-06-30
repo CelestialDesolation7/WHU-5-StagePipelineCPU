@@ -8,13 +8,23 @@ module HazardDetectionUnit(
     input [6:0] opcode_EX,         // EX阶段的opcode，用于检测分支指令
     input [2:0] funct3_EX,         // EX阶段的funct3，用于检测分支指令
     input branch_taken_EX,         // EX阶段分支是否被采取
+    input [6:0] opcode_ID,         // ID阶段的opcode，用于检测JAL指令
     output reg stall_IF,           // 暂停IF阶段的信号
     output reg flush_IF,           // 清空IF阶段的信号
-    output reg flush_ID            // 清空ID阶段的信号
+    output reg flush_ID,           // 清空ID阶段的信号
+    output reg flush_EX            // 清空EX阶段的信号
 );
     // 检测是否为分支指令
     wire is_branch_EX;
     assign is_branch_EX = (opcode_EX == 7'b1100011); // BRANCH opcode
+    
+    // 检测是否为JAL指令
+    wire is_jal_ID;
+    assign is_jal_ID = (opcode_ID == 7'b1101111); // JAL opcode
+    
+    // 检测是否为JALR指令
+    wire is_jalr_EX;
+    assign is_jalr_EX = (opcode_EX == 7'b1100111); // JALR opcode
     
     always @(*) begin
         // Load-Use冒险检测逻辑
@@ -22,9 +32,26 @@ module HazardDetectionUnit(
         if (MemRead_EX && RegWrite_EX && 
             ((rd_EX == rs1_ID && rs1_ID != 5'b0) ||    // EX阶段目标寄存器与ID阶段rs1相同
              (rd_EX == rs2_ID && rs2_ID != 5'b0))) begin // EX阶段目标寄存器与ID阶段rs2相同
-            stall_IF = 1'b1;  // 暂停IF阶段，防止新指令进入流水线
-            flush_IF = 1'b1;  // 清空IF阶段，插入气泡
-            flush_ID = 1'b0;  // 不清空ID阶段，保持当前指令
+            stall_IF = 1'b1;  // 暂停PC和IF/ID寄存器
+            flush_IF = 1'b0;  // IF阶段不需要冲刷，stall会使其保持
+            flush_ID = 1'b0;  // ID阶段不需要冲刷，stall会使其保持
+            flush_EX = 1'b1;  // 向EX阶段插入一个气泡 (NOP)
+        end
+        // JAL指令控制冒险检测逻辑
+        // JAL指令在ID阶段确定跳转，需要清空IF阶段
+        else if (is_jal_ID) begin
+            stall_IF = 1'b0;  // 不暂停IF阶段
+            flush_IF = 1'b1;  // 清空IF阶段，丢弃错误的指令
+            flush_ID = 1'b0;  // ID阶段正常执行
+            flush_EX = 1'b0;  // EX阶段正常执行
+        end
+        // JALR指令控制冒险检测逻辑
+        // JALR指令在EX阶段确定跳转，需要清空IF和ID阶段
+        else if (is_jalr_EX) begin
+            stall_IF = 1'b0;  // 不暂停IF阶段
+            flush_IF = 1'b1;  // 清空IF阶段，丢弃错误的指令
+            flush_ID = 1'b1;  // 清空ID阶段，丢弃错误的指令
+            flush_EX = 1'b0;  // EX阶段正常执行
         end
         // 分支控制冒险检测逻辑
         // 当EX阶段是分支指令且分支被采取时，需要清空IF和ID阶段
@@ -32,12 +59,14 @@ module HazardDetectionUnit(
             stall_IF = 1'b0;  // 不暂停IF阶段，允许取新指令
             flush_IF = 1'b1;  // 清空IF阶段，丢弃错误的指令
             flush_ID = 1'b1;  // 清空ID阶段，丢弃错误的指令
+            flush_EX = 1'b0;  // EX阶段正常执行
         end
         else begin
             // 没有冒险时，正常执行
             stall_IF = 1'b0;  // 不暂停IF阶段
             flush_IF = 1'b0;  // 不清空IF阶段
             flush_ID = 1'b0;  // 不清空ID阶段
+            flush_EX = 1'b0;  // 不清空EX阶段
         end
     end
 endmodule

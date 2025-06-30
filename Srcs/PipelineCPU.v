@@ -36,7 +36,7 @@ module PipelineCPU(
     wire ALUSrc_ID;
     wire [1:0] GPRSel_ID, WDSel_ID;
     wire [2:0] DMType_ID;
-    wire Zero_ID;
+    wire Zero_ID, Sign_ID, Overflow_ID, Carry_ID;
     
     // ID/EX pipeline register signals
     wire [31:0] PC_ID_EX, rs1_data_ID_EX, rs2_data_ID_EX, imm_ID_EX;
@@ -73,7 +73,7 @@ module PipelineCPU(
     wire [1:0] WDSel_EX = WDSel_ID_EX;
     wire [2:0] DMType_EX = DMType_ID_EX;
     wire [31:0] alu_result_EX, alu_B_EX;
-    wire Zero_EX;
+    wire Zero_EX, Sign_EX, Overflow_EX, Carry_EX;
     
     // EX/MEM pipeline register signals
     wire [31:0] alu_result_EX_MEM, rs2_data_EX_MEM;
@@ -152,18 +152,15 @@ module PipelineCPU(
                         (WDSel_WB == `WDSel_FromMEM) ? mem_data_WB :
                         (WDSel_WB == `WDSel_FromPC) ? (PC_WB + 4) : alu_result_WB;
     
-    // 分支是否被采取的逻辑 - 基于EX阶段的ALU结果和分支指令类型
-    wire is_branch_EX;
-    assign is_branch_EX = (opcode_EX == `OPCODE_BRANCH);
-    
-    // 根据分支指令类型和ALU的Zero信号判断分支是否被采取
-    assign branch_taken_EX = is_branch_EX && (
-        (funct3_EX == `FUNCT3_BEQ && Zero_EX) ||      // beq: 相等时跳转
-        (funct3_EX == `FUNCT3_BNE && !Zero_EX) ||     // bne: 不等时跳转
-        (funct3_EX == `FUNCT3_BLT && !Zero_EX) ||     // blt: 小于时跳转
-        (funct3_EX == `FUNCT3_BGE && Zero_EX) ||      // bge: 大于等于时跳转
-        (funct3_EX == `FUNCT3_BLTU && !Zero_EX) ||    // bltu: 无符号小于时跳转
-        (funct3_EX == `FUNCT3_BGEU && Zero_EX)        // bgeu: 无符号大于等于时跳转
+    // EX阶段的分支判断逻辑 - 基于ALU标志位
+    wire branch_taken_EX;
+    assign branch_taken_EX = (opcode_EX == `OPCODE_BRANCH) && (
+        (funct3_EX == `FUNCT3_BEQ && Zero_EX) ||                    // beq: 相等时跳转
+        (funct3_EX == `FUNCT3_BNE && !Zero_EX) ||                   // bne: 不等时跳转
+        (funct3_EX == `FUNCT3_BLT && (Sign_EX ^ Overflow_EX)) ||    // blt: 有符号小于时跳转
+        (funct3_EX == `FUNCT3_BGE && !(Sign_EX ^ Overflow_EX)) ||   // bge: 有符号大于等于时跳转
+        (funct3_EX == `FUNCT3_BLTU && Carry_EX) ||                  // bltu: 无符号小于时跳转
+        (funct3_EX == `FUNCT3_BGEU && !Carry_EX)                    // bgeu: 无符号大于等于时跳转
     );
     
     // Output assignments
@@ -180,15 +177,18 @@ module PipelineCPU(
     // PC, offer reset functionality
     PC pc_unit(.clk(clk), .rst(rst), .NPC(NPC_IF), .PC(PC_IF), .stall(stall_IF));
     
-    // 修改NPC连接：JAL指令在ID阶段生效，JALR指令在EX阶段生效，其他跳转在EX阶段生效
+    // 修改NPC连接：JAL指令在ID阶段生效，JALR指令在EX阶段生效，分支指令在EX阶段生效
     wire [2:0] npc_op_sel;
     wire [31:0] npc_imm_sel;
+    wire [31:0] npc_pc_sel;
     
     // 选择NPC操作：JAL指令使用ID阶段的信号，其他使用EX阶段的信号
-    assign npc_op_sel = (opcode_ID == `OPCODE_JAL) ? NPCOp_ID : NPCOp_EX;
+    assign npc_op_sel = (opcode_ID == `OPCODE_JAL) ? NPCOp_ID : 
+                        (branch_taken_EX) ? `NPC_BRANCH : NPCOp_EX;
     assign npc_imm_sel = (opcode_ID == `OPCODE_JAL) ? imm_ID : imm_EX;
+    assign npc_pc_sel = (opcode_ID == `OPCODE_JAL) ? PC_ID : PC_EX;
     
-    NPC npc_unit(.PC(PC_IF), .NPCOp(npc_op_sel), .IMM(npc_imm_sel), .NPC(NPC_IF), .aluout(alu_result_EX));
+    NPC npc_unit(.PC(npc_pc_sel), .NPCOp(npc_op_sel), .IMM(npc_imm_sel), .NPC(NPC_IF), .aluout(alu_result_EX));
     assign instr_IF = instr_in;
     
     
@@ -200,19 +200,11 @@ module PipelineCPU(
     // ----------------------------------------------------------------
     // IF/ID pipeline register instantiation begins
     
-    // 添加JAL指令的冲刷逻辑
-    wire jal_flush;
-    assign jal_flush = (opcode_ID == `OPCODE_JAL);
-    
-    // 添加JALR指令的冲刷逻辑
-    wire jalr_flush;
-    assign jalr_flush = (opcode_EX == `OPCODE_JALR);
-    
-    // IF/ID pipeline register - 现在使用冒险检测信号和JAL/JALR冲刷信号
+    // IF/ID pipeline register - 使用冒险检测信号
     IF_ID_Reg if_id_reg(
         .clk(clk), 
         .rst(rst), 
-        .flush(flush_ID | jal_flush | jalr_flush), 
+        .flush(flush_IF), 
         .stall(stall_IF),
         .PC_in(PC_IF), 
         .instr_in(instr_IF),
@@ -234,12 +226,14 @@ module PipelineCPU(
         .MemRead_EX(MemRead_EX),
         .RegWrite_EX(RegWrite_EX),
         .RegWrite_MEM(RegWrite_MEM),
-        .opcode_EX(opcode_EX),           // 新增：EX阶段的opcode
-        .funct3_EX(funct3_EX),           // 新增：EX阶段的funct3
-        .branch_taken_EX(branch_taken_EX), // 新增：EX阶段分支是否被采取
+        .opcode_EX(opcode_EX),           // EX阶段的opcode
+        .funct3_EX(funct3_EX),           // EX阶段的funct3
+        .branch_taken_EX(branch_taken_EX), // EX阶段分支是否被采取
+        .opcode_ID(opcode_ID),           // ID阶段的opcode，用于检测JAL指令
         .stall_IF(stall_IF),
         .flush_IF(flush_IF),
-        .flush_ID(flush_ID)
+        .flush_ID(flush_ID),
+        .flush_EX(flush_EX)
     );
 
     ctrl ctrl_unit(
@@ -286,7 +280,7 @@ module PipelineCPU(
     ID_EX_Reg id_ex_reg(
         .clk(clk), 
         .rst(rst), 
-        .flush(jal_flush | jalr_flush),
+        .flush(flush_EX),
         .PC_in(PC_ID), 
         .rs1_data_in(rs1_data_ID), 
         .rs2_data_in(rs2_data_ID), 
@@ -360,14 +354,17 @@ module PipelineCPU(
         .ALUOp(ALUOp_EX),
         .C(alu_result_EX), 
         .Zero(Zero_EX), 
-        .PC(PC_EX)
+        .PC(PC_EX),
+        .Sign(Sign_EX),
+        .Overflow(Overflow_EX),
+        .Carry(Carry_EX)
     );
     
     // EX/MEM pipeline register
     EX_MEM_Reg ex_mem_reg(
         .clk(clk), 
         .rst(rst), 
-        .flush(jalr_flush),
+        .flush(flush_EX),
         .alu_result_in(alu_result_EX), 
         .rs2_data_in(rs2_data_forwarded_EX), 
         .rd_addr_in(rd_addr_EX),
