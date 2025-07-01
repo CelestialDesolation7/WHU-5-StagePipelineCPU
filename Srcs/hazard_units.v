@@ -38,11 +38,11 @@ module HazardDetectionUnit(
             flush_EX = 1'b1;  // 向EX阶段插入一个气泡 (NOP)
         end
         // JAL指令控制冒险检测逻辑
-        // JAL指令在ID阶段确定跳转，需要清空IF阶段
+        // JAL指令在ID阶段确定跳转，需要清空IF阶段，但JAL指令本身继续执行
         else if (is_jal_ID) begin
-            stall_IF = 1'b0;  // 不暂停IF阶段
+            stall_IF = 1'b0;  // 不暂停IF阶段，允许取新指令
             flush_IF = 1'b1;  // 清空IF阶段，丢弃错误的指令
-            flush_ID = 1'b0;  // ID阶段正常执行
+            flush_ID = 1'b0;  // 不清空ID阶段，让JAL指令继续执行
             flush_EX = 1'b0;  // EX阶段正常执行
         end
         // JALR指令控制冒险检测逻辑

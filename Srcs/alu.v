@@ -10,7 +10,7 @@ module alu(A, B, ALUOp, C, Zero, Sign, Overflow, Carry, PC);
    
    reg [31:0] C;
    reg Zero, Sign, Overflow, Carry;
-   wire [32:0] temp_result;  // 33位用于检测溢出和进位
+   reg [32:0] temp_result;  // 33位用于检测溢出和进位
    integer    i;
        
    always @( * ) begin
