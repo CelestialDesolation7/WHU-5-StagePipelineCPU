@@ -160,6 +160,21 @@ module PipelineCPU(
     wire Zero_EX, Sign_EX, Overflow_EX, Carry_EX;
     wire branch_taken_EX;
 
+    // 前递单元信号
+    wire [1:0] forward_rs1, forward_rs2;
+
+    // Forwarding Unit 实例化
+    ForwardingUnit forwarding_unit(
+        .rs1_EX(rs1_addr_ID_EX),
+        .rs2_EX(rs2_addr_ID_EX),
+        .rd_MEM(rd_addr_EX_MEM),
+        .rd_WB(rd_addr_MEM_WB),
+        .RegWrite_MEM(RegWrite_EX_MEM),
+        .RegWrite_WB(RegWrite_MEM_WB),
+        .forward_rs1(forward_rs1),
+        .forward_rs2(forward_rs2)
+    );
+
     EXE_stage exe_stage(
         .clk(clk), 
         .rst(rst),
