@@ -20,13 +20,20 @@ top_module (FPGA顶层)
 │   ├── PipelineCPU (五级流水线CPU)
 │   │   ├── PC (程序计数器)
 │   │   ├── NPC (下一条指令地址)
+│   │   │
 │   │   ├── IF_ID_Reg (IF/ID流水线寄存器)
+│   │   │
 │   │   ├── ctrl (控制单元)
 │   │   ├── EXT (立即数扩展)
 │   │   ├── RF (寄存器文件)
+│   │   │
 │   │   ├── ID_EX_Reg (ID/EX流水线寄存器)
+│   │   │
 │   │   ├── alu (算术逻辑单元)
+│   │   ├── ForwardingUnit (算术逻辑单元)
+│   │   │
 │   │   ├── EX_MEM_Reg (EX/MEM流水线寄存器)
+│   │   │
 │   │   └── MEM_WB_Reg (MEM/WB流水线寄存器)
 │   ├── dm (数据存储器)
 │   └── im (指令存储器)

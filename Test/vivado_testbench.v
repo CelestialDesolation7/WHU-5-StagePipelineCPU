@@ -1,108 +1,80 @@
-`timescale 1ns / 1ps
-
-// Vivado仿真测试文件 - 测试修改后的顶层模块
+`timescale 1ns/1ps
+`include "ctrl_encode_def.v"
 module vivado_testbench();
+    reg clk, rst;
+    reg [31:0] instr_mem[0:15]; // 简单指令存储器
+    reg [31:0] data_mem[0:127]; // 数据存储器镜像
+    wire mem_w;
+    wire [31:0] PC_out, Addr_out, Data_out;
+    wire [2:0] DMType_out;
+    wire [31:0] debug_data;
+    reg [31:0] instr_in;
+    wire [31:0] Data_in;
+    reg [4:0] reg_sel;
+    wire [31:0] reg_data;
 
-    // 测试信号
-    reg clk;
-    reg rstn;
-    reg [15:0] sw_i;
-    wire [15:0] led_o;
-    wire [7:0] disp_seg_o;
-    wire [7:0] disp_an_o;
-    
-    // 实例化顶层模块
-    top_module dut(
+    // 实例化数据存储器
+    dm u_dm(
         .clk(clk),
-        .rstn(rstn),
-        .sw_i(sw_i),
-        .led_o(led_o),
-        .disp_seg_o(disp_seg_o),
-        .disp_an_o(disp_an_o)
+        .DMWr(mem_w),
+        .DMType(DMType_out),
+        .addr(Addr_out),
+        .din(Data_out),
+        .dout(Data_in)
     );
-    
+
+    // 实例化CPU
+    PipelineCPU uut(
+        .clk(clk),
+        .rst(rst),
+        .instr_in(instr_in),
+        .Data_in(Data_in),
+        .mem_w(mem_w),
+        .PC_out(PC_out),
+        .Addr_out(Addr_out),
+        .Data_out(Data_out),
+        .reg_sel(reg_sel),
+        .reg_data(reg_data),
+        .DMType_out(DMType_out),
+        .debug_data(debug_data)
+    );
+
     // 时钟生成
-    initial begin
-        clk = 0;
-        forever #5 clk = ~clk;  // 100MHz时钟
+    initial clk = 0;
+    always #5 clk = ~clk;
+
+    // 指令ROM仿真
+    always @(*) begin
+        if (PC_out[31:2] < 16)
+            instr_in = instr_mem[PC_out[5:2]];
+        else
+            instr_in = 32'h00000013; // NOP
     end
-    
-    // 测试激励
+
+    // 初始化和测试流程
     initial begin
-        // 初始化
-        rstn = 0;
-        sw_i = 16'b0;
-        
-        $display("=== RISC-V Pipeline CPU Vivado Test ===");
-        
-        // 等待一段时间后释放复位
-        #100;
-        rstn = 1;
-        
-        // 测试1: 高速运行模式 (sw_i[15]=0)
-        sw_i[15] = 0;
-        sw_i[1] = 0;  // 不暂停
-        $display("Test 1: High-speed mode");
-        #500;
-        
-        // 测试2: 低速运行模式 (sw_i[15]=1)
-        sw_i[15] = 1;
-        $display("Test 2: Low-speed mode");
-        #1000;
-        
-        // 测试3: 暂停模式 (sw_i[1]=1)
-        sw_i[1] = 1;
-        $display("Test 3: Pause mode");
-        #500;
-        
-        // 测试4: 恢复运行
-        sw_i[1] = 0;
-        $display("Test 4: Resume execution");
-        #500;
-        
-        // 测试5: 显示寄存器数据 (sw_i[13]=1)
-        sw_i[13] = 1;
-        sw_i[14:11] = 4'b0100;  // 选择寄存器数据显示
-        $display("Test 5: Register data display");
-        #1000;
-        
-        // 测试6: 显示ALU数据 (sw_i[12]=1)
-        sw_i[12] = 1;
-        sw_i[13] = 0;
-        sw_i[14:11] = 4'b0010;  // 选择ALU数据显示
-        $display("Test 6: ALU data display");
-        #1000;
-        
-        // 测试7: 显示数据存储器数据 (sw_i[11]=1)
-        sw_i[11] = 1;
-        sw_i[12] = 0;
-        sw_i[14:11] = 4'b0001;  // 选择数据存储器数据显示
-        $display("Test 7: Data memory display");
-        #1000;
-        
-        // 测试8: 显示指令 (sw_i[14:11]=1000)
-        sw_i[11] = 0;
-        sw_i[14:11] = 4'b1000;  // 选择指令显示
-        $display("Test 8: Instruction display");
-        #1000;
-        
-        // 测试9: 显示LED数据 (sw_i[0]=1)
-        sw_i[0] = 1;
-        $display("Test 9: LED data display");
-        #500;
-        
-        $display("=== RISC-V Pipeline CPU Test Results ===");
-        $display("Clock Mode: %s", (sw_i[15]) ? "Slow" : "Fast");
-        $display("CPU Status: %s", (sw_i[1]) ? "Paused" : "Running");
-        $display("Display Mode: %b", sw_i[14:11]);
-        $display("LED Data: 0x%h", led_o);
-        $display("=== Test Completed ===");
+        rst = 1;
+        reg_sel = 0;
+        // 指令：x1=5, x2=10, x3=x1+x2, mem[0]=x3, x4=mem[0]
+        instr_mem[0] = 32'b000000000101_00000_000_00001_0010011; // ADDI x1,x0,5
+        instr_mem[1] = 32'b000000001010_00000_000_00010_0010011; // ADDI x2,x0,10
+        instr_mem[2] = 32'b0000000_00010_00001_000_00011_0110011; // ADD x3,x1,x2
+        instr_mem[3] = 32'b0000000_00011_00000_010_00000_0100011; // SW x3,0(x0)
+        instr_mem[4] = 32'b0000000_00000_00000_010_00100_0000011; // LW x4,0(x0)
+        instr_mem[5] = 32'b000000000000_00000_000_00000_0010011; // NOP
+        // 其余填充为NOP
+        for(integer i=6;i<16;i=i+1) instr_mem[i]=32'h00000013;
+        // 数据存储器初始化
+        for(integer i=0;i<128;i=i+1) data_mem[i]=0;
+        #20 rst = 0;
+        // 等待指令执行
+        #200;
+        // 检查结果
+        reg_sel = 5'd1; #10; $display("x1 = %d", reg_data);
+        reg_sel = 5'd2; #10; $display("x2 = %d", reg_data);
+        reg_sel = 5'd3; #10; $display("x3 = %d", reg_data);
+        reg_sel = 5'd4; #10; $display("x4 = %d", reg_data);
+        $display("mem[0] = %d", u_dm.dmem[0]);
         $finish;
     end
-    
-    // 监控信号变化
-    initial begin
-        $monitor("Time=%0t PC=0x%h LED=0x%h sw_i=0x%h", $time, dut.cpu.PC_out, led_o, sw_i);
-    end
-
 endmodule 

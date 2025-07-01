@@ -26,6 +26,7 @@ module top_module(
     wire [31:0] reg_data;        // 寄存器数据
     wire [31:0] Addr_out;        // 地址输出
     wire [31:0] Data_out;        // 数据输出
+    wire [31:0] debug_data;      // 新增：调试数据
     
     // 寄存器显示相关信号
     reg [4:0] reg_addr;          // 寄存器地址
@@ -68,7 +69,9 @@ module top_module(
         .instr(instr),           // 当前指令
         .PC_out(PC_out),         // 程序计数器
         .Addr_out(Addr_out),     // 地址输出
-        .Data_out(Data_out)      // 数据输出
+        .Data_out(Data_out),     // 数据输出
+        .DMType_out(),           // 新增：可选输出
+        .debug_data(debug_data)  // 新增：调试数据输出
     );
     
 
@@ -161,20 +164,22 @@ module top_module(
     //Choose Data
     // 根据开关输入选择显示的数据
     always@(*) begin
-        if(sw_i[0]==1'b0)  // 如果开关0为0
+        if(sw_i[10]==1'b1) // 新增：调试显示模式
+            display_data = debug_data;
+        else if(sw_i[0]==1'b0)
         begin
-            case(sw_i[14:11])  // 根据开关14到11的值选择显示的数据
-                4'b1000: display_data = instr;          // 显示当前指令
-                4'b0100: display_data = reg_data_from_cpu;       // 显示寄存器数据
-                4'b0010: display_data = alu_disp_data;  // 显示ALU数据
-                4'b0001: display_data = dmem_data;      // 显示数据存储器数据
-                4'b1001: display_data = PC_out;         // 显示当前PC值
-                default: display_data = 32'h76543210;   // 默认显示32'h76543210
+            case(sw_i[14:11])
+                4'b1000: display_data = instr;
+                4'b0100: display_data = reg_data_from_cpu;
+                4'b0010: display_data = alu_disp_data;
+                4'b0001: display_data = dmem_data;
+                4'b1001: display_data = PC_out;
+                default: display_data = 32'h76543210;
             endcase
         end
-        else  // 如果开关0为1
+        else
         begin
-            display_data = led_disp_data;  // 显示LED数据
+            display_data = led_disp_data;
         end
     end
     

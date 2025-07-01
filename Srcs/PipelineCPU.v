@@ -10,7 +10,9 @@ module PipelineCPU(
     output [31:0] Addr_out,
     output [31:0] Data_out,
     input [4:0] reg_sel,
-    output [31:0] reg_data
+    output [31:0] reg_data,
+    output [2:0] DMType_out,
+    output [31:0] debug_data
 );
 
     // ----------------------------------------------------------------
@@ -39,10 +41,7 @@ module PipelineCPU(
     wire Zero_ID, Sign_ID, Overflow_ID, Carry_ID;
     
     // ID/EX pipeline register signals
-    wire [31:0] PC_ID_EX, rs1_data_ID_EX, rs2_data_ID_EX, imm_ID_EX;
-    wire [4:0] rs1_addr_ID_EX, rs2_addr_ID_EX, rd_addr_ID_EX;
-    wire [6:0] opcode_ID_EX, funct7_ID_EX;
-    wire [2:0] funct3_ID_EX;
+    wire [31:0] PC_ID_EX, instr_ID_EX, rs1_data_ID_EX, rs2_data_ID_EX, imm_ID_EX;
     wire RegWrite_ID_EX, MemWrite_ID_EX, MemRead_ID_EX;
     wire [5:0] EXTOp_ID_EX;
     wire [4:0] ALUOp_ID_EX;
@@ -56,12 +55,12 @@ module PipelineCPU(
     wire [31:0] rs1_data_EX = rs1_data_ID_EX;
     wire [31:0] rs2_data_EX = rs2_data_ID_EX;
     wire [31:0] imm_EX = imm_ID_EX;
-    wire [4:0] rs1_addr_EX = rs1_addr_ID_EX;
-    wire [4:0] rs2_addr_EX = rs2_addr_ID_EX;
-    wire [4:0] rd_addr_EX = rd_addr_ID_EX;
-    wire [6:0] opcode_EX = opcode_ID_EX;
-    wire [2:0] funct3_EX = funct3_ID_EX;
-    wire [6:0] funct7_EX = funct7_ID_EX;
+    wire [4:0] rs1_addr_EX = instr_ID_EX[19:15];
+    wire [4:0] rs2_addr_EX = instr_ID_EX[24:20];
+    wire [4:0] rd_addr_EX = instr_ID_EX[11:7];
+    wire [6:0] opcode_EX = instr_ID_EX[6:0];
+    wire [2:0] funct3_EX = instr_ID_EX[14:12];
+    wire [6:0] funct7_EX = instr_ID_EX[31:25];
     wire RegWrite_EX = RegWrite_ID_EX;
     wire MemWrite_EX = MemWrite_ID_EX;
     wire MemRead_EX = MemRead_ID_EX;
@@ -76,8 +75,7 @@ module PipelineCPU(
     wire Zero_EX, Sign_EX, Overflow_EX, Carry_EX;
     
     // EX/MEM pipeline register signals
-    wire [31:0] alu_result_EX_MEM, rs2_data_EX_MEM;
-    wire [4:0] rd_addr_EX_MEM;
+    wire [31:0] alu_result_EX_MEM, rs2_data_EX_MEM, instr_EX_MEM;
     wire RegWrite_EX_MEM, MemWrite_EX_MEM, MemRead_EX_MEM;
     wire [1:0] WDSel_EX_MEM;
     wire [2:0] DMType_EX_MEM;
@@ -86,7 +84,7 @@ module PipelineCPU(
     // MEM stage signals
     wire [31:0] alu_result_MEM = alu_result_EX_MEM;
     wire [31:0] rs2_data_MEM = rs2_data_EX_MEM;
-    wire [4:0] rd_addr_MEM = rd_addr_EX_MEM;
+    wire [4:0] rd_addr_MEM = instr_EX_MEM[11:7];
     wire RegWrite_MEM = RegWrite_EX_MEM;
     wire MemWrite_MEM = MemWrite_EX_MEM;
     wire MemRead_MEM = MemRead_EX_MEM;
@@ -96,8 +94,7 @@ module PipelineCPU(
     wire [31:0] mem_data_MEM;
     
     // MEM/WB pipeline register signals
-    wire [31:0] alu_result_MEM_WB, mem_data_MEM_WB;
-    wire [4:0] rd_addr_MEM_WB;
+    wire [31:0] alu_result_MEM_WB, mem_data_MEM_WB, instr_MEM_WB;
     wire RegWrite_MEM_WB;
     wire [1:0] WDSel_MEM_WB;
     wire [31:0] PC_MEM_WB;
@@ -105,7 +102,7 @@ module PipelineCPU(
     // WB stage signals
     wire [31:0] alu_result_WB = alu_result_MEM_WB;
     wire [31:0] mem_data_WB = mem_data_MEM_WB;
-    wire [4:0] rd_addr_WB = rd_addr_MEM_WB;
+    wire [4:0] rd_addr_WB = instr_MEM_WB[11:7];
     wire RegWrite_WB = RegWrite_MEM_WB;
     wire [1:0] WDSel_WB = WDSel_MEM_WB;
     wire [31:0] PC_WB = PC_MEM_WB;
@@ -168,6 +165,8 @@ module PipelineCPU(
     assign Addr_out = alu_result_MEM;
     assign Data_out = rs2_data_MEM;
     assign mem_w = MemWrite_MEM;
+    assign DMType_out = DMType_MEM;
+    assign debug_data = PC_IF;
     // ----------------------------------------------------------------
     
 
@@ -283,16 +282,11 @@ module PipelineCPU(
         .clk(clk), 
         .rst(rst), 
         .flush(flush_EX),
-        .PC_in(PC_ID), 
+        .PC_in(PC_ID),
+        .instr_in(instr_ID),
         .rs1_data_in(rs1_data_ID), 
         .rs2_data_in(rs2_data_ID), 
         .imm_in(imm_ID),
-        .rs1_addr_in(rs1_ID), 
-        .rs2_addr_in(rs2_ID), 
-        .rd_addr_in(rd_ID),
-        .opcode_in(opcode_ID), 
-        .funct3_in(funct3_ID), 
-        .funct7_in(funct7_ID),
         .RegWrite_in(RegWrite_ID), 
         .MemWrite_in(MemWrite_ID), 
         .MemRead_in(MemRead_ID),
@@ -303,17 +297,11 @@ module PipelineCPU(
         .GPRSel_in(GPRSel_ID), 
         .WDSel_in(WDSel_ID), 
         .DMType_in(DMType_ID),
-
         .PC_out(PC_ID_EX), 
+        .instr_out(instr_ID_EX),
         .rs1_data_out(rs1_data_ID_EX), 
         .rs2_data_out(rs2_data_ID_EX), 
         .imm_out(imm_ID_EX),
-        .rs1_addr_out(rs1_addr_ID_EX), 
-        .rs2_addr_out(rs2_addr_ID_EX), 
-        .rd_addr_out(rd_addr_ID_EX),
-        .opcode_out(opcode_ID_EX), 
-        .funct3_out(funct3_ID_EX), 
-        .funct7_out(funct7_ID_EX),
         .RegWrite_out(RegWrite_ID_EX), 
         .MemWrite_out(MemWrite_ID_EX), 
         .MemRead_out(MemRead_ID_EX),
@@ -369,17 +357,16 @@ module PipelineCPU(
         .flush(flush_EX),
         .alu_result_in(alu_result_EX), 
         .rs2_data_in(rs2_data_forwarded_EX), 
-        .rd_addr_in(rd_addr_EX),
+        .instr_in(instr_ID_EX),
         .RegWrite_in(RegWrite_EX), 
         .MemWrite_in(MemWrite_EX), 
         .MemRead_in(MemRead_EX),
         .WDSel_in(WDSel_EX), 
         .DMType_in(DMType_EX), 
         .PC_in(PC_EX),
-
         .alu_result_out(alu_result_EX_MEM), 
         .rs2_data_out(rs2_data_EX_MEM), 
-        .rd_addr_out(rd_addr_EX_MEM),
+        .instr_out(instr_EX_MEM),
         .RegWrite_out(RegWrite_EX_MEM), 
         .MemWrite_out(MemWrite_EX_MEM), 
         .MemRead_out(MemRead_EX_MEM),
@@ -394,17 +381,16 @@ module PipelineCPU(
     // MEM/WB pipeline register
     MEM_WB_Reg mem_wb_reg(
         .clk(clk), 
-        .rst(rst),
-        .alu_result_in(alu_result_MEM), 
+        .rst(rst), 
+        .alu_result_in(alu_result_EX_MEM), 
         .mem_data_in(mem_data_MEM), 
-        .rd_addr_in(rd_addr_MEM),
+        .instr_in(instr_EX_MEM),
         .RegWrite_in(RegWrite_MEM), 
         .WDSel_in(WDSel_MEM), 
         .PC_in(PC_MEM),
-
         .alu_result_out(alu_result_MEM_WB), 
         .mem_data_out(mem_data_MEM_WB), 
-        .rd_addr_out(rd_addr_MEM_WB),
+        .instr_out(instr_MEM_WB),
         .RegWrite_out(RegWrite_MEM_WB), 
         .WDSel_out(WDSel_MEM_WB), 
         .PC_out(PC_MEM_WB)

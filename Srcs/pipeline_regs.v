@@ -32,15 +32,10 @@ module ID_EX_Reg(
     input rst,
     input flush,
     input [31:0] PC_in,
+    input [31:0] instr_in,
     input [31:0] rs1_data_in,
     input [31:0] rs2_data_in,
     input [31:0] imm_in,
-    input [4:0] rs1_addr_in,
-    input [4:0] rs2_addr_in,
-    input [4:0] rd_addr_in,
-    input [6:0] opcode_in,
-    input [2:0] funct3_in,
-    input [6:0] funct7_in,
     input RegWrite_in,
     input MemWrite_in,
     input MemRead_in,
@@ -52,15 +47,10 @@ module ID_EX_Reg(
     input [1:0] WDSel_in,
     input [2:0] DMType_in,
     output reg [31:0] PC_out,
+    output reg [31:0] instr_out,
     output reg [31:0] rs1_data_out,
     output reg [31:0] rs2_data_out,
     output reg [31:0] imm_out,
-    output reg [4:0] rs1_addr_out,
-    output reg [4:0] rs2_addr_out,
-    output reg [4:0] rd_addr_out,
-    output reg [6:0] opcode_out,
-    output reg [2:0] funct3_out,
-    output reg [6:0] funct7_out,
     output reg RegWrite_out,
     output reg MemWrite_out,
     output reg MemRead_out,
@@ -75,15 +65,10 @@ module ID_EX_Reg(
     always @(posedge clk or posedge rst) begin
         if (rst) begin
             PC_out <= 32'h0;
+            instr_out <= 32'h0;
             rs1_data_out <= 32'h0;
             rs2_data_out <= 32'h0;
             imm_out <= 32'h0;
-            rs1_addr_out <= 5'h0;
-            rs2_addr_out <= 5'h0;
-            rd_addr_out <= 5'h0;
-            opcode_out <= 7'h0;
-            funct3_out <= 3'h0;
-            funct7_out <= 7'h0;
             RegWrite_out <= 1'b0;
             MemWrite_out <= 1'b0;
             MemRead_out <= 1'b0;
@@ -97,15 +82,10 @@ module ID_EX_Reg(
         end
         else if (flush) begin
             PC_out <= 32'h0;
+            instr_out <= 32'h0;
             rs1_data_out <= 32'h0;
             rs2_data_out <= 32'h0;
             imm_out <= 32'h0;
-            rs1_addr_out <= 5'h0;
-            rs2_addr_out <= 5'h0;
-            rd_addr_out <= 5'h0;
-            opcode_out <= 7'h0;
-            funct3_out <= 3'h0;
-            funct7_out <= 7'h0;
             RegWrite_out <= 1'b0;
             MemWrite_out <= 1'b0;
             MemRead_out <= 1'b0;
@@ -119,15 +99,10 @@ module ID_EX_Reg(
         end
         else begin
             PC_out <= PC_in;
+            instr_out <= instr_in;
             rs1_data_out <= rs1_data_in;
             rs2_data_out <= rs2_data_in;
             imm_out <= imm_in;
-            rs1_addr_out <= rs1_addr_in;
-            rs2_addr_out <= rs2_addr_in;
-            rd_addr_out <= rd_addr_in;
-            opcode_out <= opcode_in;
-            funct3_out <= funct3_in;
-            funct7_out <= funct7_in;
             RegWrite_out <= RegWrite_in;
             MemWrite_out <= MemWrite_in;
             MemRead_out <= MemRead_in;
@@ -149,7 +124,7 @@ module EX_MEM_Reg(
     input flush,
     input [31:0] alu_result_in,
     input [31:0] rs2_data_in,
-    input [4:0] rd_addr_in,
+    input [31:0] instr_in,
     input RegWrite_in,
     input MemWrite_in,
     input MemRead_in,
@@ -158,7 +133,7 @@ module EX_MEM_Reg(
     input [31:0] PC_in,
     output reg [31:0] alu_result_out,
     output reg [31:0] rs2_data_out,
-    output reg [4:0] rd_addr_out,
+    output reg [31:0] instr_out,
     output reg RegWrite_out,
     output reg MemWrite_out,
     output reg MemRead_out,
@@ -170,7 +145,7 @@ module EX_MEM_Reg(
         if (rst) begin
             alu_result_out <= 32'h0;
             rs2_data_out <= 32'h0;
-            rd_addr_out <= 5'h0;
+            instr_out <= 32'h0;
             RegWrite_out <= 1'b0;
             MemWrite_out <= 1'b0;
             MemRead_out <= 1'b0;
@@ -181,7 +156,7 @@ module EX_MEM_Reg(
         else if (flush) begin
             alu_result_out <= 32'h0;
             rs2_data_out <= 32'h0;
-            rd_addr_out <= 5'h0;
+            instr_out <= 32'h0;
             RegWrite_out <= 1'b0;
             MemWrite_out <= 1'b0;
             MemRead_out <= 1'b0;
@@ -192,7 +167,7 @@ module EX_MEM_Reg(
         else begin
             alu_result_out <= alu_result_in;
             rs2_data_out <= rs2_data_in;
-            rd_addr_out <= rd_addr_in;
+            instr_out <= instr_in;
             RegWrite_out <= RegWrite_in;
             MemWrite_out <= MemWrite_in;
             MemRead_out <= MemRead_in;
@@ -209,13 +184,13 @@ module MEM_WB_Reg(
     input rst,
     input [31:0] alu_result_in,
     input [31:0] mem_data_in,
-    input [4:0] rd_addr_in,
+    input [31:0] instr_in,
     input RegWrite_in,
     input [1:0] WDSel_in,
     input [31:0] PC_in,
     output reg [31:0] alu_result_out,
     output reg [31:0] mem_data_out,
-    output reg [4:0] rd_addr_out,
+    output reg [31:0] instr_out,
     output reg RegWrite_out,
     output reg [1:0] WDSel_out,
     output reg [31:0] PC_out
@@ -224,7 +199,7 @@ module MEM_WB_Reg(
         if (rst) begin
             alu_result_out <= 32'h0;
             mem_data_out <= 32'h0;
-            rd_addr_out <= 5'h0;
+            instr_out <= 32'h0;
             RegWrite_out <= 1'b0;
             WDSel_out <= 2'h0;
             PC_out <= 32'h0;
@@ -232,7 +207,7 @@ module MEM_WB_Reg(
         else begin
             alu_result_out <= alu_result_in;
             mem_data_out <= mem_data_in;
-            rd_addr_out <= rd_addr_in;
+            instr_out <= instr_in;
             RegWrite_out <= RegWrite_in;
             WDSel_out <= WDSel_in;
             PC_out <= PC_in;
