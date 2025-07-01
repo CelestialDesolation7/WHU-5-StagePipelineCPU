@@ -44,13 +44,6 @@ module top_module(
     reg [31:0] display_data;     // 显示数据
     reg [31:0] led_disp_data;    // LED显示数据
 
-    // 调试探针信号
-    wire [31:0] debug_probe_out;
-    debug_probe u_debug_probe(
-        .probe_in(PC_out), // 可替换为任意需要调试的信号
-        .probe_out(debug_probe_out)
-    );
-
     // 时钟分频逻辑
     always @(posedge clk or negedge rstn) begin
         if (!rstn)
@@ -79,8 +72,8 @@ module top_module(
     );
     
 
-    // ------------------------------
-    // 寄存器数据显示逻辑开始
+    
+    // 寄存器数据显示逻辑
     reg sw3_last, sw4_last;
     always @ (posedge clk or negedge rstn) begin
         if (!rstn) begin
@@ -105,18 +98,13 @@ module top_module(
             end
         end
     end
-
+    
     // 寄存器数据读取 - 通过sccomp模块的reg_data输出
     always @(*) begin
         reg_data_from_cpu = reg_data;
     end
-    // 寄存器数据显示逻辑结束
-    // ------------------------------
-
-
-
-    // ------------------------------
-    // ALU数据显示逻辑开始
+    
+    // ALU数据显示逻辑
     always@(posedge Clk_CPU or negedge rstn) begin
         if(!rstn) begin
             alu_addr <= 2'b0;
@@ -142,14 +130,8 @@ module top_module(
         2'b11: alu_disp_data = Data_out; // 显示数据输出
         endcase
     end
-    // ALU数据显示逻辑结束
-    // ------------------------------
-
-
-
-
-    // ------------------------------
-    // 数据存储器显示逻辑开始
+    
+    // 数据存储器显示逻辑
     always@(posedge Clk_CPU or negedge rstn) begin
         if(!rstn) begin
             dmem_addr <= 4'b0;
@@ -170,40 +152,25 @@ module top_module(
     always @(*) begin
         dmem_data = Addr_out;  // 显示地址作为数据存储器数据
     end
-    // 数据存储器显示逻辑结束
-    // ------------------------------
-
-
-
-
-    // ------------------------------
-    // LED默认显示数据逻辑开始
+    
+    // LED显示数据
     always @(*) begin
-        led_disp_data = 32'hFEDCBA98;  // 显示程序计数器
+        led_disp_data = PC_out;  // 显示程序计数器
     end
-    // LED默认显示数据逻辑结束
-    // ------------------------------
-
-
-
-
-    // ------------------------------
+    
+    //Choose Data
     // 根据开关输入选择显示的数据
     always@(*) begin
         if(sw_i[0]==1'b0)  // 如果开关0为0
         begin
-            if(sw_i[10]==1'b1) begin
-                display_data = debug_probe_out; // 调试显示模式
-            end else begin
-                case(sw_i[14:11])  // 根据开关14到11的值选择显示的数据
-                    4'b1000: display_data = instr;          // 显示当前指令
-                    4'b0100: display_data = reg_data_from_cpu;       // 显示寄存器数据
-                    4'b0010: display_data = alu_disp_data;  // 显示ALU数据
-                    4'b0001: display_data = dmem_data;      // 显示数据存储器数据
-                    4'b1001: display_data = PC_out;         // 显示当前PC值
-                    default: display_data = 32'h76543210;   // 默认显示32'h76543210
-                endcase
-            end
+            case(sw_i[14:11])  // 根据开关14到11的值选择显示的数据
+                4'b1000: display_data = instr;          // 显示当前指令
+                4'b0100: display_data = reg_data_from_cpu;       // 显示寄存器数据
+                4'b0010: display_data = alu_disp_data;  // 显示ALU数据
+                4'b0001: display_data = dmem_data;      // 显示数据存储器数据
+                4'b1001: display_data = PC_out;         // 显示当前PC值
+                default: display_data = 32'h76543210;   // 默认显示32'h76543210
+            endcase
         end
         else  // 如果开关0为1
         begin
@@ -228,14 +195,6 @@ module top_module(
     );
 
 endmodule
-
-
-
-
-
-
-
-
 
 // 七段数码管控制器模块
 module seg7_controller(
