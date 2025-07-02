@@ -63,7 +63,7 @@ module ID_EX_Reg(
     always @(posedge clk or posedge rst) begin
         if (rst) begin
             PC_out <= 32'h0;
-            instr_out <= 32'h0;
+            instr_out <= 32'h00000013;
             rs1_data_out <= 32'h0;
             rs2_data_out <= 32'h0;
             imm_out <= 32'h0;
@@ -79,7 +79,7 @@ module ID_EX_Reg(
         end
         else if (flush) begin
             PC_out <= 32'h0;
-            instr_out <= 32'h0;
+            instr_out <= 32'h00000013;
             rs1_data_out <= 32'h0;
             rs2_data_out <= 32'h0;
             imm_out <= 32'h0;
@@ -140,7 +140,7 @@ module EX_MEM_Reg(
         if (rst) begin
             alu_result_out <= 32'h0;
             rs2_data_out <= 32'h0;
-            instr_out <= 32'h0;
+            instr_out <= 32'h00000013;
             RegWrite_out <= 1'b0;
             MemWrite_out <= 1'b0;
             MemRead_out <= 1'b0;
@@ -151,7 +151,7 @@ module EX_MEM_Reg(
         else if (flush) begin
             alu_result_out <= 32'h0;
             rs2_data_out <= 32'h0;
-            instr_out <= 32'h0;
+            instr_out <= 32'h00000013;
             RegWrite_out <= 1'b0;
             MemWrite_out <= 1'b0;
             MemRead_out <= 1'b0;
@@ -194,7 +194,7 @@ module MEM_WB_Reg(
         if (rst) begin
             alu_result_out <= 32'h0;
             mem_data_out <= 32'h0;
-            instr_out <= 32'h0;
+            instr_out <= 32'h00000013;
             RegWrite_out <= 1'b0;
             WDSel_out <= 2'h0;
             PC_out <= 32'h0;

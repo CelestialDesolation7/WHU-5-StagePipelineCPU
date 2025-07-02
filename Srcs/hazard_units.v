@@ -56,7 +56,6 @@ module HazardDetectionUnit(
             flush_ID = 1'b1;
             flush_EX = 1'b0;
         end
-        // JAL优先级最低
         else if (opcode_ID == `OPCODE_JAL) begin
             stall_IF = 1'b0;
             flush_IF = 1'b1;
@@ -69,6 +68,8 @@ module HazardDetectionUnit(
             flush_ID = 1'b0;
             flush_EX = 1'b0;
         end
+
+
         // NPCOp/NPCImm优先级决策
         if (opcode_EX == `OPCODE_JALR) begin
             NPCOp_out = `NPC_JALR;
