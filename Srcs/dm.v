@@ -50,14 +50,12 @@ module dm(clk, DMWr, DMType, addr, din, dout);
          case (DMType)
             `DM_WORD: begin  // 字写入：直接写入32位数据
                dmem[word_addr] <= din;  // 写入整个字
-               $display("dmem[0x%8X] = 0x%8X (word)", addr, din);  // 调试输出
             end
             `DM_HALFWORD: begin  // 半字写入：写入16位数据
                if (byte_offset[1])  // 如果偏移量是2或3，写入高16位
                   dmem[word_addr][31:16] <= din[15:0];
                else                 // 如果偏移量是0或1，写入低16位
                   dmem[word_addr][15:0] <= din[15:0];
-               $display("dmem[0x%8X] = 0x%4X (halfword)", addr, din[15:0]);  // 调试输出
             end
             `DM_BYTE: begin  // 字节写入：写入8位数据
                case (byte_offset)  // 根据字节偏移量选择写入位置
@@ -66,7 +64,6 @@ module dm(clk, DMWr, DMType, addr, din, dout);
                   2'b10: dmem[word_addr][23:16] <= din[7:0];  // 字节2
                   2'b11: dmem[word_addr][31:24] <= din[7:0];  // 字节3
                endcase
-               $display("dmem[0x%8X] = 0x%2X (byte)", addr, din[7:0]);  // 调试输出
             end
          endcase
       end

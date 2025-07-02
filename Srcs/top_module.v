@@ -183,9 +183,6 @@ module top_module(
         end
     end
     
-    // LED输出
-    // assign led_o[15:0] = display_data[15:0];  // 显示数据的低16位
-    
     // 七段数码管显示逻辑
     wire [31:0] seg_data;
     assign seg_data = display_data;  // 显示完整的32位数据
