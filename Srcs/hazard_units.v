@@ -9,22 +9,27 @@ module HazardDetectionUnit(
     input [2:0] funct3_EX,         // EX阶段的funct3，用于检测分支指令
     input branch_taken_EX,         // EX阶段分支是否被采取
     input [6:0] opcode_ID,         // ID阶段的opcode，用于检测JAL指令
+    input [31:0] imm_EX,           // EX阶段的立即数
+    input [31:0] imm_ID,           // ID阶段的立即数
+    input [31:0] alu_result_EX,    // EX阶段ALU输出（JALR用）
     output reg stall_IF,           // 暂停IF阶段的信号
     output reg flush_IF,           // 清空IF阶段的信号
     output reg flush_ID,           // 清空ID阶段的信号
-    output reg flush_EX            // 清空EX阶段的信号
+    output reg flush_EX,           // 清空EX阶段的信号
+    output reg [2:0] NPCOp_out,
+    output reg [31:0] NPCImm_out
 );
     // 检测是否为分支指令
     wire is_branch_EX;
-    assign is_branch_EX = (opcode_EX == 7'b1100011); // BRANCH opcode
+    assign is_branch_EX = (opcode_EX == `OPCODE_BRANCH); // BRANCH opcode
     
     // 检测是否为JAL指令
     wire is_jal_ID;
-    assign is_jal_ID = (opcode_ID == 7'b1101111); // JAL opcode
+    assign is_jal_ID = (opcode_ID == `OPCODE_JAL); // JAL opcode
     
     // 检测是否为JALR指令
     wire is_jalr_EX;
-    assign is_jalr_EX = (opcode_EX == 7'b1100111); // JALR opcode
+    assign is_jalr_EX = (opcode_EX == `OPCODE_JALR); // JALR opcode
     
     always @(*) begin
         // Load-Use冒险检测逻辑
@@ -37,36 +42,46 @@ module HazardDetectionUnit(
             flush_ID = 1'b0;  // ID阶段不需要冲刷，stall会使其保持
             flush_EX = 1'b1;  // 向EX阶段插入一个气泡 (NOP)
         end
-        // JAL指令控制冒险检测逻辑
-        // JAL指令在ID阶段确定跳转，需要清空IF阶段，但JAL指令本身继续执行
-        else if (is_jal_ID) begin
-            stall_IF = 1'b0;  // 不暂停IF阶段，允许取新指令
-            flush_IF = 1'b1;  // 清空IF阶段，丢弃错误的指令
-            flush_ID = 1'b0;  // 不清空ID阶段，让JAL指令继续执行
-            flush_EX = 1'b0;  // EX阶段正常执行
+        // JALR优先级最高
+        else if (opcode_EX == `OPCODE_JALR) begin
+            stall_IF = 1'b0;
+            flush_IF = 1'b1;
+            flush_ID = 1'b1;
+            flush_EX = 1'b0;
         end
-        // JALR指令控制冒险检测逻辑
-        // JALR指令在EX阶段确定跳转，需要清空IF和ID阶段
-        else if (is_jalr_EX) begin
-            stall_IF = 1'b0;  // 不暂停IF阶段
-            flush_IF = 1'b1;  // 清空IF阶段，丢弃错误的指令
-            flush_ID = 1'b1;  // 清空ID阶段，丢弃错误的指令
-            flush_EX = 1'b0;  // EX阶段正常执行
+        // Branch次之
+        else if ((opcode_EX == `OPCODE_BRANCH) && branch_taken_EX) begin
+            stall_IF = 1'b0;
+            flush_IF = 1'b1;
+            flush_ID = 1'b1;
+            flush_EX = 1'b0;
         end
-        // 分支控制冒险检测逻辑
-        // 当EX阶段是分支指令且分支被采取时，需要清空IF和ID阶段
-        else if (is_branch_EX && branch_taken_EX) begin
-            stall_IF = 1'b0;  // 不暂停IF阶段，允许取新指令
-            flush_IF = 1'b1;  // 清空IF阶段，丢弃错误的指令
-            flush_ID = 1'b1;  // 清空ID阶段，丢弃错误的指令
-            flush_EX = 1'b0;  // EX阶段正常执行
+        // JAL优先级最低
+        else if (opcode_ID == `OPCODE_JAL) begin
+            stall_IF = 1'b0;
+            flush_IF = 1'b1;
+            flush_ID = 1'b0;
+            flush_EX = 1'b0;
         end
         else begin
-            // 没有冒险时，正常执行
-            stall_IF = 1'b0;  // 不暂停IF阶段
-            flush_IF = 1'b0;  // 不清空IF阶段
-            flush_ID = 1'b0;  // 不清空ID阶段
-            flush_EX = 1'b0;  // 不清空EX阶段
+            stall_IF = 1'b0;
+            flush_IF = 1'b0;
+            flush_ID = 1'b0;
+            flush_EX = 1'b0;
+        end
+        // NPCOp/NPCImm优先级决策
+        if (opcode_EX == `OPCODE_JALR) begin
+            NPCOp_out = `NPC_JALR;
+            NPCImm_out = 32'b0; // JALR用alu_result_EX
+        end else if ((opcode_EX == `OPCODE_BRANCH) && branch_taken_EX) begin
+            NPCOp_out = `NPC_BRANCH;
+            NPCImm_out = imm_EX;
+        end else if (opcode_ID == `OPCODE_JAL) begin
+            NPCOp_out = `NPC_JUMP;
+            NPCImm_out = imm_ID;
+        end else begin
+            NPCOp_out = `NPC_PLUS4;
+            NPCImm_out = 32'b0;
         end
     end
 endmodule

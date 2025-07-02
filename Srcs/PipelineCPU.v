@@ -173,21 +173,19 @@ module PipelineCPU(
 
     // ----------------------------------------------------------------
     // IF Stage Hardware instantiation begins
-    // PC, offer reset functionality
-    PC pc_unit(.clk(clk), .rst(rst), .NPC(NPC_IF), .PC(PC_IF), .stall(stall_IF));
-    
-    // 修改NPC连接：JAL指令在ID阶段生效，JALR指令在EX阶段生效，分支指令在EX阶段生效
+    // PC_NPC: 统一PC与下一个PC的计算
+    PC_NPC pc_npc_unit(
+        .clk(clk),
+        .rst(rst),
+        .stall(stall_IF),
+        .NPCOp(npc_op_sel),
+        .IMM(npc_imm_sel),
+        .aluout(alu_result_EX),
+        .PC(PC_IF)
+    );
+    // npc_op_sel和npc_imm_sel由HazardDetectionUnit输出
     wire [2:0] npc_op_sel;
     wire [31:0] npc_imm_sel;
-    wire [31:0] npc_pc_sel;
-    
-    // 选择NPC操作：JAL指令使用ID阶段的信号，其他使用EX阶段的信号
-    assign npc_op_sel = (opcode_ID == `OPCODE_JAL) ? NPCOp_ID : 
-                        (branch_taken_EX) ? `NPC_BRANCH : NPCOp_EX;
-    assign npc_imm_sel = (opcode_ID == `OPCODE_JAL) ? imm_ID : imm_EX;
-    assign npc_pc_sel = (opcode_ID == `OPCODE_JAL) ? PC_ID : PC_EX;
-    
-    NPC npc_unit(.PC(npc_pc_sel), .NPCOp(npc_op_sel), .IMM(npc_imm_sel), .NPC(NPC_IF), .aluout(alu_result_EX));
     assign instr_IF = instr_in;
     
     
@@ -229,10 +227,15 @@ module PipelineCPU(
         .funct3_EX(funct3_EX),           // EX阶段的funct3
         .branch_taken_EX(branch_taken_EX), // EX阶段分支是否被采取
         .opcode_ID(opcode_ID),           // ID阶段的opcode，用于检测JAL指令
+        .imm_EX(imm_EX),                 // EX阶段立即数
+        .imm_ID(imm_ID),                 // ID阶段立即数
+        .alu_result_EX(alu_result_EX),   // EX阶段ALU输出
         .stall_IF(stall_IF),
         .flush_IF(flush_IF),
         .flush_ID(flush_ID),
-        .flush_EX(flush_EX)
+        .flush_EX(flush_EX),
+        .NPCOp_out(npc_op_sel),
+        .NPCImm_out(npc_imm_sel)
     );
 
     ctrl ctrl_unit(
@@ -279,38 +282,36 @@ module PipelineCPU(
     
     // ID/EX pipeline register
     ID_EX_Reg id_ex_reg(
-        .clk(clk), 
-        .rst(rst), 
+        .clk(clk),
+        .rst(rst),
         .flush(flush_EX),
         .PC_in(PC_ID),
         .instr_in(instr_ID),
-        .rs1_data_in(rs1_data_ID), 
-        .rs2_data_in(rs2_data_ID), 
+        .rs1_data_in(rs1_data_ID),
+        .rs2_data_in(rs2_data_ID),
         .imm_in(imm_ID),
-        .RegWrite_in(RegWrite_ID), 
-        .MemWrite_in(MemWrite_ID), 
+        .RegWrite_in(RegWrite_ID),
+        .MemWrite_in(MemWrite_ID),
         .MemRead_in(MemRead_ID),
-        .EXTOp_in(EXTOp_ID), 
-        .ALUOp_in(ALUOp_ID), 
-        .NPCOp_in(NPCOp_ID),
-        .ALUSrc_in(ALUSrc_ID), 
-        .GPRSel_in(GPRSel_ID), 
-        .WDSel_in(WDSel_ID), 
+        .EXTOp_in(EXTOp_ID),
+        .ALUOp_in(ALUOp_ID),
+        .ALUSrc_in(ALUSrc_ID),
+        .GPRSel_in(GPRSel_ID),
+        .WDSel_in(WDSel_ID),
         .DMType_in(DMType_ID),
-        .PC_out(PC_ID_EX), 
+        .PC_out(PC_ID_EX),
         .instr_out(instr_ID_EX),
-        .rs1_data_out(rs1_data_ID_EX), 
-        .rs2_data_out(rs2_data_ID_EX), 
+        .rs1_data_out(rs1_data_ID_EX),
+        .rs2_data_out(rs2_data_ID_EX),
         .imm_out(imm_ID_EX),
-        .RegWrite_out(RegWrite_ID_EX), 
-        .MemWrite_out(MemWrite_ID_EX), 
+        .RegWrite_out(RegWrite_ID_EX),
+        .MemWrite_out(MemWrite_ID_EX),
         .MemRead_out(MemRead_ID_EX),
-        .EXTOp_out(EXTOp_ID_EX), 
-        .ALUOp_out(ALUOp_ID_EX), 
-        .NPCOp_out(NPCOp_ID_EX),
-        .ALUSrc_out(ALUSrc_ID_EX), 
-        .GPRSel_out(GPRSel_ID_EX), 
-        .WDSel_out(WDSel_ID_EX), 
+        .EXTOp_out(EXTOp_ID_EX),
+        .ALUOp_out(ALUOp_ID_EX),
+        .ALUSrc_out(ALUSrc_ID_EX),
+        .GPRSel_out(GPRSel_ID_EX),
+        .WDSel_out(WDSel_ID_EX),
         .DMType_out(DMType_ID_EX)
     );
     

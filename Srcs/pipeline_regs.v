@@ -41,7 +41,6 @@ module ID_EX_Reg(
     input MemRead_in,
     input [5:0] EXTOp_in,
     input [4:0] ALUOp_in,
-    input [2:0] NPCOp_in,
     input ALUSrc_in,
     input [1:0] GPRSel_in,
     input [1:0] WDSel_in,
@@ -56,7 +55,6 @@ module ID_EX_Reg(
     output reg MemRead_out,
     output reg [5:0] EXTOp_out,
     output reg [4:0] ALUOp_out,
-    output reg [2:0] NPCOp_out,
     output reg ALUSrc_out,
     output reg [1:0] GPRSel_out,
     output reg [1:0] WDSel_out,
@@ -74,7 +72,6 @@ module ID_EX_Reg(
             MemRead_out <= 1'b0;
             EXTOp_out <= 6'h0;
             ALUOp_out <= 5'h0;
-            NPCOp_out <= 3'h0;
             ALUSrc_out <= 1'b0;
             GPRSel_out <= 2'h0;
             WDSel_out <= 2'h0;
@@ -91,7 +88,6 @@ module ID_EX_Reg(
             MemRead_out <= 1'b0;
             EXTOp_out <= 6'h0;
             ALUOp_out <= 5'h0;
-            NPCOp_out <= 3'h0;
             ALUSrc_out <= 1'b0;
             GPRSel_out <= 2'h0;
             WDSel_out <= 2'h0;
@@ -108,7 +104,6 @@ module ID_EX_Reg(
             MemRead_out <= MemRead_in;
             EXTOp_out <= EXTOp_in;
             ALUOp_out <= ALUOp_in;
-            NPCOp_out <= NPCOp_in;
             ALUSrc_out <= ALUSrc_in;
             GPRSel_out <= GPRSel_in;
             WDSel_out <= WDSel_in;
