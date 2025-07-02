@@ -12,6 +12,12 @@ module dm(clk, DMWr, DMType, addr, din, dout);
    wire [31:0] mem_data;      // 从存储器读取的原始数据
    wire [1:0] byte_offset;    // 字节偏移量 (地址的低2位)
    wire [6:0] word_addr;      // 字地址 (地址的高7位)
+   integer i;
+   
+   initial begin
+      for (i = 0; i < 128; i = i + 1)
+          dmem[i] = 32'b0;
+   end
    
    // 计算字地址和字节偏移量
    assign word_addr = addr[8:2];     // 字地址：地址的高7位
