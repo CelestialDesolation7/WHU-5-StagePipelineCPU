@@ -174,10 +174,12 @@ module PipelineCPU(
     // ----------------------------------------------------------------
     // IF Stage Hardware instantiation begins
     // PC_NPC: 统一PC与下一个PC的计算
+    wire [31:0] npc_base_pc;
     PC_NPC pc_npc_unit(
         .clk(clk),
         .rst(rst),
         .stall(stall_IF),
+        .base_PC(npc_base_pc),
         .NPCOp(npc_op_sel),
         .IMM(npc_imm_sel),
         .aluout(alu_result_EX),
@@ -230,12 +232,15 @@ module PipelineCPU(
         .imm_EX(imm_EX),                 // EX阶段立即数
         .imm_ID(imm_ID),                 // ID阶段立即数
         .alu_result_EX(alu_result_EX),   // EX阶段ALU输出
+        .PC_EX(PC_EX),                   // EX阶段PC
+        .PC_ID(PC_ID),                   // ID阶段PC
         .stall_IF(stall_IF),
         .flush_IF(flush_IF),
         .flush_ID(flush_ID),
         .flush_EX(flush_EX),
         .NPCOp_out(npc_op_sel),
-        .NPCImm_out(npc_imm_sel)
+        .NPCImm_out(npc_imm_sel),
+        .base_PC_out(npc_base_pc)
     );
 
     ctrl ctrl_unit(

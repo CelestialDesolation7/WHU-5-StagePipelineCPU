@@ -12,12 +12,15 @@ module HazardDetectionUnit(
     input [31:0] imm_EX,           // EX阶段的立即数
     input [31:0] imm_ID,           // ID阶段的立即数
     input [31:0] alu_result_EX,    // EX阶段ALU输出（JALR用）
+    input [31:0] PC_EX,           // EX阶段PC
+    input [31:0] PC_ID,           // ID阶段PC
     output reg stall_IF,           // 暂停IF阶段的信号
     output reg flush_IF,           // 清空IF阶段的信号
     output reg flush_ID,           // 清空ID阶段的信号
     output reg flush_EX,           // 清空EX阶段的信号
     output reg [2:0] NPCOp_out,
-    output reg [31:0] NPCImm_out
+    output reg [31:0] NPCImm_out,
+    output reg [31:0] base_PC_out
 );
     // 检测是否为分支指令
     wire is_branch_EX;
@@ -70,19 +73,23 @@ module HazardDetectionUnit(
         end
 
 
-        // NPCOp/NPCImm优先级决策
+        // NPCOp/NPCImm/base_PC优先级决策
         if (opcode_EX == `OPCODE_JALR) begin
             NPCOp_out = `NPC_JALR;
             NPCImm_out = 32'b0; // JALR用alu_result_EX
+            base_PC_out = PC_EX;
         end else if ((opcode_EX == `OPCODE_BRANCH) && branch_taken_EX) begin
             NPCOp_out = `NPC_BRANCH;
             NPCImm_out = imm_EX;
+            base_PC_out = PC_EX;
         end else if (opcode_ID == `OPCODE_JAL) begin
             NPCOp_out = `NPC_JUMP;
             NPCImm_out = imm_ID;
+            base_PC_out = PC_ID;
         end else begin
             NPCOp_out = `NPC_PLUS4;
             NPCImm_out = 32'b0;
+            base_PC_out = PC_EX;
         end
     end
 endmodule

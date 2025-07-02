@@ -61,8 +61,8 @@ module hal_pipeline_test();
         instr_mem[3] = 32'h00c0026f; // JAL x4, +12 (PC+12)     0x0C
         instr_mem[4] = 32'h00500293; // ADDI x5,x0,5 (跳过)      0x10
         instr_mem[5] = 32'h00600313; // ADDI x6,x0,6 (跳过)      0x14
-        instr_mem[6] = 32'h006283b3; // ADD x7,x5,x6 (跳过)      0x18
-        instr_mem[7] = 32'h00400413; // ADDI x8,x0,4 (跳转到这里)0x1C
+        instr_mem[6] = 32'h006283b3; // ADD x7,x5,x6 (跳转到这里)      0x18
+        instr_mem[7] = 32'h00400413; // ADDI x8,x0,4 0x1C
         for(integer i=8;i<16;i=i+1) instr_mem[i]=32'h00000013;
         #20 rst = 0;
         // 逐周期监控流水线关键信号

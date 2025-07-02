@@ -13,11 +13,11 @@ module IF_ID_Reg(
     always @(posedge clk or posedge rst) begin
         if (rst) begin
             PC_out <= 32'h0;
-            instr_out <= 32'h0;
+            instr_out <= 32'h00000013;
         end
         else if (flush) begin
             PC_out <= 32'h0;
-            instr_out <= 32'h0;
+            instr_out <= 32'h00000013;
         end
         else if (!stall) begin
             PC_out <= PC_in;

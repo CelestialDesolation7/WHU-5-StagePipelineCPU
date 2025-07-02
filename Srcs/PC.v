@@ -4,6 +4,7 @@ module PC_NPC(
   input clk,
   input rst,
   input stall,
+  input [31:0] base_PC,
   input [2:0] NPCOp,
   input [31:0] IMM,
   input [31:0] aluout,
@@ -17,8 +18,8 @@ module PC_NPC(
   always @(*) begin
     case (NPCOp)
       `NPC_PLUS4:  next_PC = PCPLUS4;
-      `NPC_BRANCH: next_PC = PC + IMM;
-      `NPC_JUMP:   next_PC = PC + IMM;
+      `NPC_BRANCH: next_PC = base_PC + IMM;
+      `NPC_JUMP:   next_PC = base_PC + IMM;
       `NPC_JALR:   next_PC = aluout;
       default:     next_PC = PCPLUS4;
     endcase
