@@ -96,35 +96,51 @@ module HazardDetectionUnit(
 endmodule
 
 // 转发单元 - 实现数据转发以解决数据冒险
-// 该模块检测数据依赖并生成转发控制信号，将最新数据转发到EX阶段
+// 该模块检测数据依赖并生成转发控制信号，将最新数据转发到EX阶段和ID阶段
 module ForwardingUnit(
     input [4:0] rs1_EX, rs2_EX,    // EX阶段的源寄存器地址
+    input [4:0] rs1_ID, rs2_ID,    // ID阶段的源寄存器地址
     input [4:0] rd_MEM, rd_WB,     // MEM和WB阶段的目标寄存器地址
     input RegWrite_MEM, RegWrite_WB, // MEM和WB阶段是否写寄存器
-    output reg [1:0] forward_rs1,  // rs1的转发控制信号
-    output reg [1:0] forward_rs2   // rs2的转发控制信号
+    output reg [1:0] forward_rs1_EX,  // EX阶段rs1的转发控制信号
+    output reg [1:0] forward_rs2_EX,  // EX阶段rs2的转发控制信号
+    output reg [1:0] forward_rs1_ID,  // ID阶段rs1的转发控制信号
+    output reg [1:0] forward_rs2_ID   // ID阶段rs2的转发控制信号
 );
     always @(*) begin
-        // rs1的转发逻辑
+        // EX阶段rs1的转发逻辑
         if (RegWrite_MEM && rd_MEM != 5'b0 && rd_MEM == rs1_EX)
             // 如果MEM阶段写寄存器且目标寄存器与EX阶段的rs1相同
-            forward_rs1 = 2'b01;  // 从MEM阶段转发数据
+            forward_rs1_EX = 2'b01;  // 从MEM阶段转发数据
         else if (RegWrite_WB && rd_WB != 5'b0 && rd_WB == rs1_EX)
             // 如果WB阶段写寄存器且目标寄存器与EX阶段的rs1相同
-            forward_rs1 = 2'b10;  // 从WB阶段转发数据
+            forward_rs1_EX = 2'b10;  // 从WB阶段转发数据
         else
             // 没有数据依赖，不需要转发
-            forward_rs1 = 2'b00;  // 不转发，使用寄存器堆中的数据
+            forward_rs1_EX = 2'b00;  // 不转发，使用寄存器堆中的数据
             
-        // rs2的转发逻辑（与rs1类似）
+        // EX阶段rs2的转发逻辑（与rs1类似）
         if (RegWrite_MEM && rd_MEM != 5'b0 && rd_MEM == rs2_EX)
             // 如果MEM阶段写寄存器且目标寄存器与EX阶段的rs2相同
-            forward_rs2 = 2'b01;  // 从MEM阶段转发数据
+            forward_rs2_EX = 2'b01;  // 从MEM阶段转发数据
         else if (RegWrite_WB && rd_WB != 5'b0 && rd_WB == rs2_EX)
             // 如果WB阶段写寄存器且目标寄存器与EX阶段的rs2相同
-            forward_rs2 = 2'b10;  // 从WB阶段转发数据
+            forward_rs2_EX = 2'b10;  // 从WB阶段转发数据
         else
             // 没有数据依赖，不需要转发
-            forward_rs2 = 2'b00;  // 不转发，使用寄存器堆中的数据
+            forward_rs2_EX = 2'b00;  // 不转发，使用寄存器堆中的数据
+
+        // ID阶段rs1的转发逻辑
+        // 只能从WB阶段转发，因为MEM阶段的数据还没有准备好
+        if (RegWrite_WB && rd_WB != 5'b0 && rd_WB == rs1_ID)
+            forward_rs1_ID = 2'b10;  // 从WB阶段转发数据
+        else
+            forward_rs1_ID = 2'b00;  // 不转发，使用寄存器堆中的数据
+            
+        // ID阶段rs2的转发逻辑
+        if (RegWrite_WB && rd_WB != 5'b0 && rd_WB == rs2_ID)
+            forward_rs2_ID = 2'b10;  // 从WB阶段转发数据
+        else
+            forward_rs2_ID = 2'b00;  // 不转发，使用寄存器堆中的数据
     end
 endmodule 

@@ -31,6 +31,8 @@ module PC_NPC(
       PC <= 32'h0000_0000;
     else if (!stall)
       PC <= next_PC;
+    else
+      PC <= PC;
   end
 
 endmodule

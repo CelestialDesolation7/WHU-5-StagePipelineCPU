@@ -88,9 +88,12 @@ module PipelineCPU(
     wire flush_IF; // 清空IF阶段
     wire flush_ID; // 清空ID阶段
     wire flush_EX; // 清空EX阶段
-    wire [1:0] forward_rs1; // 源寄存器1前递信号
-    wire [1:0] forward_rs2; // 源寄存器2前递信号
+    wire [1:0] forward_rs1_EX; // EX阶段源寄存器1前递信号
+    wire [1:0] forward_rs2_EX; // EX阶段源寄存器2前递信号
+    wire [1:0] forward_rs1_ID; // ID阶段源寄存器1前递信号
+    wire [1:0] forward_rs2_ID; // ID阶段源寄存器2前递信号
     wire [31:0] rs1_data_forwarded_EX, rs2_data_forwarded_EX;
+    wire [31:0] rs1_data_forwarded_ID, rs2_data_forwarded_ID;
     wire branch_taken_EX;
     // Control signals wire preparation ends
     // ----------------------------------------------------------------
@@ -129,8 +132,7 @@ module PipelineCPU(
     // Instruction Decode wire preparation ends
     // ----------------------------------------------------------------
 
-    // ALU B operand selection
-    assign alu_B_EX = ALUSrc_EX ? imm_EX : rs2_data_forwarded_EX;
+
     
     // Write back data selection
     assign wb_data_WB = (WDSel_WB == `WDSel_FromALU) ? alu_result_WB :
@@ -273,6 +275,13 @@ module PipelineCPU(
         .reg_sel(reg_sel),
         .reg_data(reg_data)
     );
+    
+    // ID阶段前递逻辑 - 从WB阶段前递数据到ID阶段
+    assign rs1_data_forwarded_ID = (forward_rs1_ID == 2'b10) ? wb_data_WB :  // 从WB阶段前递
+                                   rs1_data_ID;                              // 不使用前递
+    
+    assign rs2_data_forwarded_ID = (forward_rs2_ID == 2'b10) ? wb_data_WB :  // 从WB阶段前递
+                                   rs2_data_ID;                              // 不使用前递
     // ID Stage Hardware instantiation ends
     // ----------------------------------------------------------------
     
@@ -286,8 +295,8 @@ module PipelineCPU(
         .flush(flush_EX),
         .PC_in(PC_ID),
         .instr_in(instr_ID),
-        .rs1_data_in(rs1_data_ID),
-        .rs2_data_in(rs2_data_ID),
+        .rs1_data_in(rs1_data_forwarded_ID),
+        .rs2_data_in(rs2_data_forwarded_ID),
         .imm_in(imm_ID),
         .RegWrite_in(RegWrite_ID),
         .MemWrite_in(MemWrite_ID),
@@ -320,23 +329,30 @@ module PipelineCPU(
     ForwardingUnit forwarding_unit(
         .rs1_EX(rs1_addr_EX),
         .rs2_EX(rs2_addr_EX),
+        .rs1_ID(rs1_ID),
+        .rs2_ID(rs2_ID),
         .rd_MEM(rd_addr_MEM),
         .rd_WB(rd_addr_WB),
         .RegWrite_MEM(RegWrite_MEM),
         .RegWrite_WB(RegWrite_WB),
-        .forward_rs1(forward_rs1),
-        .forward_rs2(forward_rs2)
+        .forward_rs1_EX(forward_rs1_EX),
+        .forward_rs2_EX(forward_rs2_EX),
+        .forward_rs1_ID(forward_rs1_ID),
+        .forward_rs2_ID(forward_rs2_ID)
     );
     
-    // 前递逻辑 - 根据前递单元的输出选择数据源
-    assign rs1_data_forwarded_EX = (forward_rs1 == 2'b01) ? alu_result_MEM :  // 从MEM阶段前递
-                                   (forward_rs1 == 2'b10) ? wb_data_WB :       // 从WB阶段前递
+    // EX阶段前递逻辑 - 根据前递单元的输出选择数据源
+    assign rs1_data_forwarded_EX = (forward_rs1_EX == 2'b01) ? alu_result_MEM :  // 从MEM阶段前递
+                                   (forward_rs1_EX == 2'b10) ? wb_data_WB :       // 从WB阶段前递
                                    rs1_data_EX;                                // 不使用前递
     
-    assign rs2_data_forwarded_EX = (forward_rs2 == 2'b01) ? alu_result_MEM :  // 从MEM阶段前递
-                                   (forward_rs2 == 2'b10) ? wb_data_WB :       // 从WB阶段前递
+    assign rs2_data_forwarded_EX = (forward_rs2_EX == 2'b01) ? alu_result_MEM :  // 从MEM阶段前递
+                                   (forward_rs2_EX == 2'b10) ? wb_data_WB :       // 从WB阶段前递
                                    rs2_data_EX;                                // 不使用前递
     
+    // ALU B operand selection
+    assign alu_B_EX = ALUSrc_EX ? imm_EX : rs2_data_forwarded_EX;
+
     alu alu_unit(
         .A(rs1_data_forwarded_EX), 
         .B(alu_B_EX), 
