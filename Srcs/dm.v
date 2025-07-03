@@ -1,3 +1,4 @@
+`include "ctrl_encode_def.v"
 // 数据存储器模块 - 支持字节、半字、字的读写操作
 // 该模块实现了RISC-V RV32I指令集中的所有存储器访问指令
 module dm(clk, DMWr, DMType, addr, din, dout);

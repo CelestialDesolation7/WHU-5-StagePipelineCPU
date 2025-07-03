@@ -1,3 +1,4 @@
+`include "ctrl_encode_def.v"
 // 危险检测单元 - 检测和处理流水线中的数据冒险和控制冒险
 // 该模块实现了Load-Use冒险检测和分支控制冒险检测
 module HazardDetectionUnit(
@@ -37,7 +38,7 @@ module HazardDetectionUnit(
     always @(*) begin
         // Load-Use冒险检测逻辑
         // 当EX阶段是Load指令且目标寄存器与ID阶段的源寄存器相同时会发生冒险
-        if (MemRead_EX && RegWrite_EX && 
+        if (MemRead_EX && 
             ((rd_EX == rs1_ID && rs1_ID != 5'b0) ||    // EX阶段目标寄存器与ID阶段rs1相同
              (rd_EX == rs2_ID && rs2_ID != 5'b0))) begin // EX阶段目标寄存器与ID阶段rs2相同
             stall_IF = 1'b1;  // 暂停PC和IF/ID寄存器

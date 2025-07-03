@@ -7,12 +7,12 @@ PC	Machine Code	Basic Code
 0x14	0x00819193	slli x3 x3 8    //
 0x18	0x02118193	addi x3 x3 33
 0x1c	0x00310133	add x2 x2 x3
-0x20	0x00202023	sw x2 0(x0)	s
+0x20	0x00202023	sw x2 0(x0)	s   // 第一次保存
 0x24	0x00800593	addi x11 x0 8
 0x28	0x00002783	lw x15 0(x0)
 0x2c	0x00000133	add x2 x0 x0
 0x30	0x00F00213	addi x4 x0 15
-0x34	0x0047F3B3	and x7 x15 x4
+0x34	0x0047F3B3	and x7 x15 x4   //数据冒险
 0x38	0x00211493	slli x9 x2 2
 0x3c	0x0093D3B3	srl x7 x7 x9
 0x40	0x00421293	slli x5 x4 4
@@ -63,3 +63,13 @@ PC	Machine Code	Basic Code
 0xf0	0x00A393B3	sll x7 x7 x10
 0xf4	0x0077E7B3	or x15 x15 x7
 0xf8	0x00008067	jalr x0 x1 0
+
+
+
+
+我知道问题在哪了，请你作出修改：
+当前冒险检测单元对于load-use冒险的判断逻辑存在问题。
+我的测试代码中，
+0x30	0x00F00213	addi x4 x0 15
+0x34	0x0047F3B3	and x7 x15 x4
+引发了数据冒险，按照预期，我们将发现前递单元在此时

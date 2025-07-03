@@ -5,6 +5,7 @@ module PipelineCPU(
     input rst,
     input [31:0] instr_in,  // 读入指令值
     input [31:0] Data_in,   // 读入数据值
+
     output mem_w,           // 写使能信号
     output [31:0] PC_out,   // 输出PC值
     output [31:0] Addr_out, // 输出地址值
@@ -21,98 +22,84 @@ module PipelineCPU(
     wire [31:0] PC_IF;      // 输出PC值
     
     // ID stage signals
-    wire [31:0] instr_ID;   // 输出指令值
-    wire [31:0] rs1_data_ID, rs2_data_ID, imm_ID; // 输出寄存器数据
-    wire RegWrite_ID, MemWrite_ID, MemRead_ID; // 输出寄存器写使能信号
-    wire [5:0] EXTOp_ID; // 输出扩展操作类型
-    wire [4:0] ALUOp_ID; // 输出ALU操作类型
-    wire [2:0] NPCOp_ID; // 输出NPC操作类型
+    // 长连接
+    wire [31:0] instr_ID;   // 输出指令值，表示此阶段正在执行的指令
+    wire [31:0] PC_ID;      // ID阶段PC值
+    wire [31:0] rs1_data_ID; // 源寄存器1数据，在此阶段读出，向后传递等待计算或写入
+    wire [31:0] rs2_data_ID; // 源寄存器2数据，在此阶段读出，向后传递等待计算或写入
+    wire [31:0] imm_ID; // 立即数，在此阶段拼装，向后传递等待计算
+    // 控制信号短连接
+    wire RegWrite_ID; // 输出寄存器写使能信号，表示指令是否需要写入寄存器
+    wire MemWrite_ID; // 输出内存写使能信号，表示指令是否需要写入内存
+    wire MemRead_ID; // 输出内存读使能信号，表示指令是否需要读取内存
+    wire [5:0] EXTOp_ID; // 输出扩展操作类型，表示指令是否需要扩展操作
+    wire [4:0] ALUOp_ID; // 输出ALU操作类型，表示指令需要何种ALU操作
     wire ALUSrc_ID; // 输出ALU源选择信号
-    wire [1:0] GPRSel_ID, WDSel_ID; // 输出寄存器选择信号
+    wire [1:0] WDSel_ID; // 输出写数据选择信号
     wire [2:0] DMType_ID; // 输出数据类型
-    wire Zero_ID, Sign_ID, Overflow_ID, Carry_ID; // 输出标志信号
     
     // EX stage signals
+    // 长连接
     wire [31:0] instr_EX; // 输出指令值
-    wire [31:0] PC_EX;
-    wire [31:0] rs1_data_EX;
-    wire [31:0] rs2_data_EX;
-    wire [31:0] imm_EX;
-    wire RegWrite_EX;
-    wire MemWrite_EX;
-    wire MemRead_EX;
-    wire [5:0] EXTOp_EX;
-    wire [4:0] ALUOp_EX;
-    wire ALUSrc_EX;
-    wire [1:0] GPRSel_EX;
-    wire [1:0] WDSel_EX;
-    wire [2:0] DMType_EX;
-    wire [31:0] alu_result_EX, alu_B_EX;
-    wire Zero_EX, Sign_EX, Overflow_EX, Carry_EX;
+    wire [31:0] PC_EX;  // 输出PC值
+    wire [31:0] rs1_data_EX; // 输出寄存器数据
+    wire [31:0] rs2_data_EX; // 输出寄存器数据
+    wire [31:0] imm_EX; // 输出立即数
+    // 控制信号短连接
+    wire RegWrite_EX; // 输出寄存器写使能信号
+    wire MemWrite_EX; // 输出内存写使能信号
+    wire MemRead_EX; // 输出内存读使能信号
+    wire [4:0] ALUOp_EX; // 输出ALU操作类型
+    wire ALUSrc_EX; // 输出ALU源选择信号
+    wire [1:0] WDSel_EX; // 输出写数据选择信号
+    wire [2:0] DMType_EX; // 输出数据类型
+    wire [31:0] alu_result_EX, alu_B_EX; // 输出ALU结果
+    wire Zero_EX, Sign_EX, Overflow_EX, Carry_EX; // 输出标志信号
     
     // MEM stage signals
-    wire [31:0] instr_MEM;
-    wire [31:0] alu_result_MEM;
-    wire [31:0] rs2_data_MEM;
-    wire [4:0] rd_addr_MEM = instr_MEM[11:7];
-    wire RegWrite_MEM;
-    wire MemWrite_MEM;
-    wire MemRead_MEM;
-    wire [1:0] WDSel_MEM;
-    wire [2:0] DMType_MEM;
-    wire [31:0] PC_MEM;
-    wire [31:0] mem_data_MEM;
-        
+    // 长连接
+    wire [31:0] instr_MEM; // 输出指令值
+    wire [31:0] alu_result_MEM; // 输出ALU结果
+    wire [31:0] rs2_data_MEM; // 输出寄存器数据
+    wire [31:0] PC_MEM; // 输出PC值
+    wire [31:0] mem_data_MEM; // 输出内存数据
+    wire [4:0] rd_addr_MEM = instr_MEM[11:7]; // 输出寄存器地址
+    // 控制信号短连接
+    wire RegWrite_MEM; // 输出寄存器写使能信号
+    wire MemWrite_MEM; // 输出内存写使能信号
+    wire MemRead_MEM; // 输出内存读使能信号
+    wire [1:0] WDSel_MEM; // 输出写数据选择信号
+    wire [2:0] DMType_MEM; // 输出数据类型
+    
     // WB stage signals
-    wire [31:0] instr_WB;
-    wire [31:0] alu_result_WB;
-    wire [31:0] mem_data_WB;
-    wire [4:0] rd_addr_WB = instr_WB[11:7];
-    wire RegWrite_WB;
-    wire [1:0] WDSel_WB;
-    wire [31:0] PC_WB;
-    wire [31:0] wb_data_WB;
+    // 长连接
+    wire [31:0] instr_WB; // 输出指令值
+    wire [31:0] alu_result_WB; // 输出ALU结果
+    wire [31:0] mem_data_WB; // 输出内存数据
+    wire [31:0] PC_WB; // 输出PC值
+    wire [31:0] wb_data_WB; // 输出写数据
+    wire [4:0] rd_addr_WB = instr_WB[11:7]; // 输出寄存器地址
+    // 控制信号短连接
+    wire RegWrite_WB; // 输出寄存器写使能信号
+    wire [1:0] WDSel_WB; // 输出写数据选择信号
     
     // Hazard detection and forwarding signals
-    wire stall_IF, flush_IF, flush_ID, flush_EX;
-    wire [1:0] forward_rs1, forward_rs2;
-
-    // ALU B operand selection
-    assign alu_B_EX = ALUSrc_EX ? imm_EX : rs2_data_EX;
-    
-    // Write back data selection
-    assign wb_data_WB = (WDSel_WB == `WDSel_FromALU) ? alu_result_WB :
-                        (WDSel_WB == `WDSel_FromMEM) ? mem_data_WB :
-                        (WDSel_WB == `WDSel_FromPC) ? (PC_WB + 4) : alu_result_WB;
-    
-    // EX阶段的分支判断逻辑 - 基于ALU标志位
+    wire stall_IF; // 暂停IF阶段
+    wire flush_IF; // 清空IF阶段
+    wire flush_ID; // 清空ID阶段
+    wire flush_EX; // 清空EX阶段
+    wire [1:0] forward_rs1; // 源寄存器1前递信号
+    wire [1:0] forward_rs2; // 源寄存器2前递信号
+    wire [31:0] rs1_data_forwarded_EX, rs2_data_forwarded_EX;
     wire branch_taken_EX;
-    assign branch_taken_EX = (opcode_EX == `OPCODE_BRANCH) && (
-        (funct3_EX == `FUNCT3_BEQ && Zero_EX) ||                    // beq: 相等时跳转
-        (funct3_EX == `FUNCT3_BNE && !Zero_EX) ||                   // bne: 不等时跳转
-        (funct3_EX == `FUNCT3_BLT && (Sign_EX ^ Overflow_EX)) ||    // blt: 有符号小于时跳转
-        (funct3_EX == `FUNCT3_BGE && !(Sign_EX ^ Overflow_EX)) ||   // bge: 有符号大于等于时跳转
-        (funct3_EX == `FUNCT3_BLTU && Carry_EX) ||                  // bltu: 无符号小于时跳转
-        (funct3_EX == `FUNCT3_BGEU && !Carry_EX)                    // bgeu: 无符号大于等于时跳转
-    );
-    
-    // Output assignments
-    assign PC_out = PC_IF;
-    assign Addr_out = alu_result_MEM;
-    assign Data_out = rs2_data_MEM;
-    assign mem_w = MemWrite_MEM;
-    assign DMType_out = DMType_MEM;
-    assign debug_data = PC_IF;
-
     // Control signals wire preparation ends
     // ----------------------------------------------------------------
-    
-    
+
+
 
     // ----------------------------------------------------------------
-    // Instruction Decode wire preparation begins
-    // Instruction decode
-    wire [4:0] rs1_ID, rs2_ID, rd_ID;
+    // Instruction decode wire preparation begins
+    wire [4:0] rs1_ID, rs2_ID;
     wire [6:0] opcode_ID, funct7_ID;
     wire [2:0] funct3_ID;
 
@@ -121,7 +108,6 @@ module PipelineCPU(
     assign funct3_ID = instr_ID[14:12];
     assign rs1_ID = instr_ID[19:15];
     assign rs2_ID = instr_ID[24:20];
-    assign rd_ID = instr_ID[11:7];
     
     // Immediate extraction
     wire [4:0] iimm_shamt_ID;
@@ -140,16 +126,47 @@ module PipelineCPU(
     wire [4:0] rd_addr_EX = instr_EX[11:7];
     wire [6:0] opcode_EX = instr_EX[6:0];
     wire [2:0] funct3_EX = instr_EX[14:12];
-    wire [6:0] funct7_EX = instr_EX[31:25];
     // Instruction Decode wire preparation ends
     // ----------------------------------------------------------------
+
+    // ALU B operand selection
+    assign alu_B_EX = ALUSrc_EX ? imm_EX : rs2_data_forwarded_EX;
     
+    // Write back data selection
+    assign wb_data_WB = (WDSel_WB == `WDSel_FromALU) ? alu_result_WB :
+                        (WDSel_WB == `WDSel_FromMEM) ? mem_data_WB :
+                        (WDSel_WB == `WDSel_FromPC) ? (PC_WB + 4) : alu_result_WB;
+    
+    // EX阶段的分支判断逻辑 - 基于ALU标志位
+
+    assign branch_taken_EX = (opcode_EX == `OPCODE_BRANCH) && (
+        (funct3_EX == `FUNCT3_BEQ && Zero_EX) ||                    // beq: 相等时跳转
+        (funct3_EX == `FUNCT3_BNE && !Zero_EX) ||                   // bne: 不等时跳转
+        (funct3_EX == `FUNCT3_BLT && (Sign_EX ^ Overflow_EX)) ||    // blt: 有符号小于时跳转
+        (funct3_EX == `FUNCT3_BGE && !(Sign_EX ^ Overflow_EX)) ||   // bge: 有符号大于等于时跳转
+        (funct3_EX == `FUNCT3_BLTU && Carry_EX) ||                  // bltu: 无符号小于时跳转
+        (funct3_EX == `FUNCT3_BGEU && !Carry_EX)                    // bgeu: 无符号大于等于时跳转
+    );
+    
+    // Output assignments
+    assign PC_out = PC_IF;
+    assign Addr_out = alu_result_MEM;
+    assign Data_out = rs2_data_MEM;
+    assign mem_w = MemWrite_MEM;
+    assign DMType_out = DMType_MEM;
+    assign debug_data = PC_IF;
+
+
 
 
     // ----------------------------------------------------------------
     // IF Stage Hardware instantiation begins
     // PC_NPC: 统一PC与下一个PC的计算
+    // npc_op_sel和npc_imm_sel由HazardDetectionUnit输出
+    wire [2:0] npc_op_sel;
+    wire [31:0] npc_imm_sel;
     wire [31:0] npc_base_pc;
+
     PC_NPC pc_npc_unit(
         .clk(clk),
         .rst(rst),
@@ -160,9 +177,6 @@ module PipelineCPU(
         .aluout(alu_result_EX),
         .PC(PC_IF)
     );
-    // npc_op_sel和npc_imm_sel由HazardDetectionUnit输出
-    wire [2:0] npc_op_sel;
-    wire [31:0] npc_imm_sel;
     // IF Stage Hardware instantiation ends
     // ----------------------------------------------------------------
 
@@ -174,7 +188,7 @@ module PipelineCPU(
     IF_ID_Reg if_id_reg(
         .clk(clk), 
         .rst(rst), 
-        .flush(flush_IF), 
+        .flush(flush_IF || flush_ID),  // 支持IF和ID阶段的flush
         .stall(stall_IF),
         .PC_in(PC_IF), 
         .instr_in(instr_in),
@@ -225,15 +239,12 @@ module PipelineCPU(
         .Op(opcode_ID), 
         .Funct7(funct7_ID), 
         .Funct3(funct3_ID), 
-        .Zero(Zero_ID),
         .RegWrite(RegWrite_ID), 
         .MemWrite(MemWrite_ID), 
         .MemRead(MemRead_ID),
         .EXTOp(EXTOp_ID), 
         .ALUOp(ALUOp_ID), 
-        .NPCOp(NPCOp_ID),
         .ALUSrc(ALUSrc_ID), 
-        .GPRSel(GPRSel_ID), 
         .WDSel(WDSel_ID), 
         .DMType(DMType_ID)
     );
@@ -281,10 +292,8 @@ module PipelineCPU(
         .RegWrite_in(RegWrite_ID),
         .MemWrite_in(MemWrite_ID),
         .MemRead_in(MemRead_ID),
-        .EXTOp_in(EXTOp_ID),
         .ALUOp_in(ALUOp_ID),
         .ALUSrc_in(ALUSrc_ID),
-        .GPRSel_in(GPRSel_ID),
         .WDSel_in(WDSel_ID),
         .DMType_in(DMType_ID),
         .PC_out(PC_EX),
@@ -295,10 +304,8 @@ module PipelineCPU(
         .RegWrite_out(RegWrite_EX),
         .MemWrite_out(MemWrite_EX),
         .MemRead_out(MemRead_EX),
-        .EXTOp_out(EXTOp_EX),
         .ALUOp_out(ALUOp_EX),
         .ALUSrc_out(ALUSrc_EX),
-        .GPRSel_out(GPRSel_EX),
         .WDSel_out(WDSel_EX),
         .DMType_out(DMType_EX)
     );
@@ -309,8 +316,6 @@ module PipelineCPU(
 
     // ----------------------------------------------------------------
     // EXE Stage Hardware instantiation begins
-    wire [31:0] rs1_data_forwarded_EX, rs2_data_forwarded_EX;
-    
     // 实例化前递单元
     ForwardingUnit forwarding_unit(
         .rs1_EX(rs1_addr_EX),
@@ -353,6 +358,7 @@ module PipelineCPU(
     EX_MEM_Reg ex_mem_reg(
         .clk(clk), 
         .rst(rst), 
+        
         .flush(flush_EX),
         .alu_result_in(alu_result_EX), 
         .rs2_data_in(rs2_data_forwarded_EX), 
@@ -363,6 +369,7 @@ module PipelineCPU(
         .WDSel_in(WDSel_EX), 
         .DMType_in(DMType_EX), 
         .PC_in(PC_EX),
+
         .alu_result_out(alu_result_MEM), 
         .rs2_data_out(rs2_data_MEM), 
         .instr_out(instr_MEM),
@@ -387,12 +394,14 @@ module PipelineCPU(
     MEM_WB_Reg mem_wb_reg(
         .clk(clk), 
         .rst(rst), 
+
         .alu_result_in(alu_result_MEM), 
         .mem_data_in(mem_data_MEM), 
         .instr_in(instr_MEM),
         .RegWrite_in(RegWrite_MEM), 
         .WDSel_in(WDSel_MEM), 
         .PC_in(PC_MEM),
+
         .alu_result_out(alu_result_WB), 
         .mem_data_out(mem_data_WB), 
         .instr_out(instr_WB),

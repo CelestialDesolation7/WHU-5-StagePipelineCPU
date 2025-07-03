@@ -3,17 +3,14 @@
 module ctrl(input  [6:0] Op,       // opcode
             input  [6:0] Funct7,    // funct7
             input  [2:0] Funct3,    // funct3
-            input        Zero,      // ALU Zero flag
             
             output       RegWrite, // control signal for register write
             output       MemWrite, // control signal for memory write
             output       MemRead,  // control signal for memory read
             output [5:0] EXTOp,    // control signal to signed extension
             output [4:0] ALUOp,    // ALU opertion
-            output [2:0] NPCOp,    // next pc operation
             output       ALUSrc,   // ALU source for A
             output [2:0] DMType,   // Data memory access type
-            output [1:0] GPRSel,   // general purpose register selection
             output [1:0] WDSel    // (register) write data selection
             );
             
@@ -97,30 +94,26 @@ module ctrl(input  [6:0] Op,       // opcode
    assign WDSel[1] = jal | jalr;
    assign WDSel[0] = load;
    
-   // Next PC operation - 分支判断将在EX阶段进行
-   assign NPCOp[2] = jalr;
-   assign NPCOp[1] = jal;
-   assign NPCOp[0] = 1'b0; // 分支指令在ID阶段不跳转，在EX阶段决定
    
    // ALU operation encoding
    assign ALUOp = (beq) ? `ALU_BEQ :
-                (bne) ? `ALU_BNE :
-                (blt) ? `ALU_BLT :
-                (bge) ? `ALU_BGE :
-                (bltu) ? `ALU_BLTU :
-                (bgeu) ? `ALU_BGEU :
-                (lui) ? `ALU_LUI :
-                (auipc) ? `ALU_AUIPC :
-                (addi | add | load | store | jalr) ? `ALU_ADD :
-                (sub) ? `ALU_SUB :
-                (slti | slt) ? `ALU_SLT :
-                (sltiu | sltu) ? `ALU_SLTU :
-                (xori | xor_op) ? `ALU_XOR :
-                (ori | or_op) ? `ALU_OR :
-                (andi | and_op) ? `ALU_AND :
-                (slli | sll) ? `ALU_SLL :
-                (srli | srl) ? `ALU_SRL :
-                (srai | sra) ? `ALU_SRA : `ALU_NOP;
+                 (bne) ? `ALU_BNE :
+                 (blt) ? `ALU_BLT :
+                 (bge) ? `ALU_BGE :
+                 (bltu) ? `ALU_BLTU :
+                 (bgeu) ? `ALU_BGEU :
+                 (lui) ? `ALU_LUI :
+                 (auipc) ? `ALU_AUIPC :
+                 (addi | add | load | store | jalr) ? `ALU_ADD :
+                 (sub) ? `ALU_SUB :
+                 (slti | slt) ? `ALU_SLT :
+                 (sltiu | sltu) ? `ALU_SLTU :
+                 (xori | xor_op) ? `ALU_XOR :
+                 (ori | or_op) ? `ALU_OR :
+                 (andi | and_op) ? `ALU_AND :
+                 (slli | sll) ? `ALU_SLL :
+                 (srli | srl) ? `ALU_SRL :
+                 (srai | sra) ? `ALU_SRA : `ALU_NOP;
 
    // Data memory access type
    assign DMType[2] = lbu | lhu;
@@ -130,7 +123,4 @@ module ctrl(input  [6:0] Op,       // opcode
    // Control signals generation ends
    // ------------------------------------------------------------
    
-   // Register selection
-   assign GPRSel = `GPRSel_RD;
-
 endmodule
