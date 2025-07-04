@@ -18,24 +18,25 @@ $$
 top_module (FPGA顶层)
 ├── sccomp (CPU系统)
 │   ├── PipelineCPU (五级流水线CPU)
-│   │   ├── PC (程序计数器)
-│   │   ├── NPC (下一条指令地址)
+│   │   ├── PC_NPC (程序计数器和下一条指令地址计算)
 │   │   │
 │   │   ├── IF_ID_Reg (IF/ID流水线寄存器)
 │   │   │
 │   │   ├── ctrl (控制单元)
 │   │   ├── EXT (立即数扩展)
 │   │   ├── RF (寄存器文件)
+│   │   ├── HazardDetectionUnit (冒险检测单元)
 │   │   │
 │   │   ├── ID_EX_Reg (ID/EX流水线寄存器)
 │   │   │
 │   │   ├── alu (算术逻辑单元)
-│   │   ├── ForwardingUnit (算术逻辑单元)
+│   │   ├── ForwardingUnit (前递单元)
 │   │   │
 │   │   ├── EX_MEM_Reg (EX/MEM流水线寄存器)
 │   │   │
+│   │   ├── dm (数据存储器)
+│   │   │
 │   │   └── MEM_WB_Reg (MEM/WB流水线寄存器)
-│   ├── dm (数据存储器)
 │   └── im (指令存储器)
 └── seg7_controller (七段数码管控制器)
 ```
@@ -46,116 +47,100 @@ top_module (FPGA顶层)
 
 这个部分的全部硬件为：
 
-- PC和NPC
+- PC_NPC（程序计数器和下一条指令地址计算）
 
 ## 定义
 
-### PC
-
-```verilog
-module PC( clk, rst, NPC, PC );
-
-  input              clk;
-  input              rst;
-  input       [31:0] NPC;
-  output reg  [31:0] PC;
-
-  always @(posedge clk, posedge rst)
-    if (rst) 
-      PC <= 32'h0000_0000;
-    else
-      PC <= NPC;
-      
-endmodule
-```
-
-- 这是一个形式上的模块，只是为了提供指令地址复位到0的功能。
-
-### NPC
+### PC_NPC
 
 ```verilog
 `include "ctrl_encode_def.v"
 
-module NPC(PC, NPCOp, IMM, NPC,aluout);  // next pc module
+module PC_NPC(
+    input clk,
+    input rst,
+    input stall,
+    input [31:0] base_PC,
+    input [2:0] NPCOp,
+    input [31:0] IMM,
+    input [31:0] aluout,
+    output reg [31:0] PC
+);
     
-   input  [31:0] PC;        // pc
-   input  [2:0]  NPCOp;     // next pc operation
-   input  [31:0] IMM;       // immediate
-	input [31:0] aluout;
-   output reg [31:0] NPC;   // next pc
-   
-   wire [31:0] PCPLUS4;
-   
-   assign PCPLUS4 = PC + 4; // pc + 4
-   
-   always @(*) begin
-      case (NPCOp)
-          `NPC_PLUS4:  NPC = PCPLUS4;
-          `NPC_BRANCH: NPC = PC+IMM;
-          `NPC_JUMP:   NPC = PC+IMM;
-		  `NPC_JALR:	NPC =aluout;
-          default:     NPC = PCPLUS4;
-      endcase
-   end // end always
-   
+    wire [31:0] PCPLUS4;
+    wire [31:0] NPC;
+    
+    assign PCPLUS4 = PC + 4; // pc + 4
+    
+    // NPC计算逻辑
+    always @(*) begin
+        case (NPCOp)
+            `NPC_PLUS4:  NPC = PCPLUS4;
+            `NPC_BRANCH: NPC = base_PC + IMM;
+            `NPC_JUMP:   NPC = base_PC + IMM;
+            `NPC_JALR:   NPC = aluout;
+            default:     NPC = PCPLUS4;
+        endcase
+    end
+    
+    // PC更新逻辑
+    always @(posedge clk, posedge rst) begin
+        if (rst) 
+            PC <= 32'h0000_0000;
+        else if (!stall)
+            PC <= NPC;
+    end
+      
 endmodule
 ```
 
-- 这是主要的模块。
-- NPCOp, IMM, aluout接收控制信号等和跳转指令有关的指示数据，PC与指令存储器相连。
-- 该模块以此决定将什么指令向后发送。
+- 这是主要的模块，集成了PC和NPC的功能
+- NPCOp, IMM, aluout接收控制信号等和跳转指令有关的指示数据
+- 该模块以此决定将什么指令向后发送
+- 支持暂停功能，当stall=1时PC保持不变
 
 ## 实例化
 
-### PC
-
+### PC_NPC
 
 ```verilog
 // IF stage
-    PC pc_unit(.clk(clk), .rst(rst), .NPC(NPC_IF), .PC(PC_IF));
-```
-
-### NPC
-
-
-```verilog
-    // 修改NPC连接：JAL指令在ID阶段生效，JALR指令在EX阶段生效，其他跳转在EX阶段生效
-    wire [2:0] npc_op_sel;
-    wire [31:0] npc_imm_sel;
-    
-    // 选择NPC操作：JAL指令使用ID阶段的信号，其他使用EX阶段的信号
-    assign npc_op_sel = (opcode_ID == `OPCODE_JAL) ? NPCOp_ID : NPCOp_EX;
-    assign npc_imm_sel = (opcode_ID == `OPCODE_JAL) ? imm_ID : imm_EX;
-    
-    NPC npc_unit(.PC(PC_IF), .NPCOp(npc_op_sel), .IMM(npc_imm_sel), .NPC(NPC_IF), .aluout(alu_result_EX));
-    assign instr_IF = instr_in;
+    PC_NPC pc_npc_unit(
+        .clk(clk),
+        .rst(rst),
+        .stall(stall_IF),
+        .base_PC(npc_base_pc),
+        .NPCOp(npc_op_sel),
+        .IMM(npc_imm_sel),
+        .aluout(alu_result_EX),
+        .PC(PC_IF)
+    );
 ```
 
 ## 理解过程
 
 你的疑惑：
 
-- 这里npc_op_sel，npc_imm_sel ，opcode_ID 三个信号是从何而来，起什么作用？
+- 这里npc_op_sel，npc_imm_sel，npc_base_pc三个信号是从何而来，起什么作用？
 
 对应理解：
 
-- 检测到JAL类型指令时，说明控制冒险发生，流水线应插入空泡。
-- 事实：一个指令对应的，在其全执行过程内需要用到的控制信号，由该指令的编码唯一确定。
-	- 也就是说，只要获得了指令（也就是IF阶段完成，ID阶段开始），就可以获得其控制信号值。
-	- 换而言之，控制信号计算是一个查找表（LUT），即CTRL硬件。
+- 这些信号由HazardDetectionUnit生成，用于处理控制冒险
+- 检测到JAL类型指令时，说明控制冒险发生，流水线应插入空泡
+- 事实：一个指令对应的，在其全执行过程内需要用到的控制信号，由该指令的编码唯一确定
 - 回顾：为什么有控制冒险？
-	- 在 IF 阶段：我们不知道当前是否该跳转，先默认 `PC+4`。
-	- 在 ID 阶段：解码出 `jal`，立即数 `imm` 可以拿到，跳转地址 = `PC + imm`。
-	- ⚠️ 此时，**下一条指令已经被 IF 取出（PC+4 的那一条），如果 jal 真要跳，就必须丢弃这条指令**。
-	- 这个"下一条指令"现在在哪？在 IF 阶段的硬件。
-	- 显然，这就是我们正在设计的硬件。
-	- 它要接收流水线后端的信号，并在后端汇报JAL指令时，将当前指令标记为"被丢弃"。
-- 对于JAL指令，跳转地址由指令本身直接可以给出。
-	- 如果JAL引起了跳转，那么这个JAL现在位于ID。
-	- 显然，我们要从流水线寄存器获得它。
-- 对于JALR指令，跳转地址要由给定的寄存器和偏移量相加得到。
-  - 如果JJALR引起了跳转，那么这个JAL现在位于EX。
-  - 显然，我们要从流水线寄存器获得它。
+  - 在 IF 阶段：我们不知道当前是否该跳转，先默认 `PC+4`
+  - 在 ID 阶段：解码出 `jal`，立即数 `imm` 可以拿到，跳转地址 = `PC + imm`
+  - ⚠️ 此时，**下一条指令已经被 IF 取出（PC+4 的那一条），如果 jal 真要跳，就必须丢弃这条指令**
+  - 这个"下一条指令"现在在哪？在 IF 阶段的硬件
+  - 显然，这就是我们正在设计的硬件
+  - 它要接收流水线后端的信号，并在后端汇报JAL指令时，将当前指令标记为"被丢弃"
+- 对于JAL指令，跳转地址由指令本身直接可以给出
+  - 如果JAL引起了跳转，那么这个JAL现在位于ID
+  - 显然，我们要从流水线寄存器获得它
+- 对于JALR指令，跳转地址要由给定的寄存器和偏移量相加得到
+  - 如果JALR引起了跳转，那么这个JALR现在位于EX
+  - 显然，我们要从流水线寄存器获得它
 
 # ID
 
@@ -165,6 +150,7 @@ endmodule
 
 - CTRL控制单元（ctrl）
 - 冒险检测单元（HazardDetectionUnit）
+- 前递单元（ForwardingUnit）
 - 立即数生成单元（EXT）
 - 寄存器文件（RF）
 
@@ -330,38 +316,168 @@ endmodule
 ### HazardDetectionUnit
 
 ```verilog
-// 危险检测单元 - 检测和处理流水线中的数据冒险
-// 该模块实现了Load-Use冒险检测，当检测到冒险时会暂停流水线
+`include "ctrl_encode_def.v"
+// 危险检测单元 - 检测和处理流水线中的数据冒险和控制冒险
+// 该模块实现了Load-Use冒险检测和分支控制冒险检测
 module HazardDetectionUnit(
     input [4:0] rs1_ID, rs2_ID,    // ID阶段的源寄存器地址
     input [4:0] rd_EX, rd_MEM,     // EX和MEM阶段的目标寄存器地址
     input MemRead_EX,              // EX阶段是否为Load指令
     input RegWrite_EX, RegWrite_MEM, // EX和MEM阶段是否写寄存器
+    input [6:0] opcode_EX,         // EX阶段的opcode，用于检测分支指令
+    input [2:0] funct3_EX,         // EX阶段的funct3，用于检测分支指令
+    input branch_taken_EX,         // EX阶段分支是否被采取
+    input [6:0] opcode_ID,         // ID阶段的opcode，用于检测JAL指令
+    input [31:0] imm_EX,           // EX阶段的立即数
+    input [31:0] imm_ID,           // ID阶段的立即数
+    input [31:0] alu_result_EX,    // EX阶段ALU输出（JALR用）
+    input [31:0] PC_EX,           // EX阶段PC
+    input [31:0] PC_ID,           // ID阶段PC
     output reg stall_IF,           // 暂停IF阶段的信号
     output reg flush_IF,           // 清空IF阶段的信号
-    output reg flush_ID            // 清空ID阶段的信号
+    output reg flush_ID,           // 清空ID阶段的信号
+    output reg flush_EX,           // 清空EX阶段的信号
+    output reg [2:0] NPCOp_out,
+    output reg [31:0] NPCImm_out,
+    output reg [31:0] base_PC_out
 );
+    // 检测是否为分支指令
+    wire is_branch_EX;
+    assign is_branch_EX = (opcode_EX == `OPCODE_BRANCH); // BRANCH opcode
+    
+    // 检测是否为JAL指令
+    wire is_jal_ID;
+    assign is_jal_ID = (opcode_ID == `OPCODE_JAL); // JAL opcode
+    
+    // 检测是否为JALR指令
+    wire is_jalr_EX;
+    assign is_jalr_EX = (opcode_EX == `OPCODE_JALR); // JALR opcode
+    
     always @(*) begin
         // Load-Use冒险检测逻辑
         // 当EX阶段是Load指令且目标寄存器与ID阶段的源寄存器相同时会发生冒险
-        if (MemRead_EX && RegWrite_EX && 
+        // 此处处理的是Load与接下来第一条指令的冒险
+        if (MemRead_EX && 
             ((rd_EX == rs1_ID && rs1_ID != 5'b0) ||    // EX阶段目标寄存器与ID阶段rs1相同
              (rd_EX == rs2_ID && rs2_ID != 5'b0))) begin // EX阶段目标寄存器与ID阶段rs2相同
-            stall_IF = 1'b1;  // 暂停IF阶段，防止新指令进入流水线
-            flush_IF = 1'b1;  // 清空IF阶段，插入气泡
-            flush_ID = 1'b0;  // 不清空ID阶段，保持当前指令
+            stall_IF = 1'b1;  // 暂停PC和IF/ID寄存器
+            flush_IF = 1'b0;  // IF阶段不需要冲刷，stall会使其保持
+            flush_ID = 1'b0;  // ID阶段不需要冲刷，stall会使其保持
+            flush_EX = 1'b1;  // 向EX阶段插入一个气泡 (NOP)
+        end
+        // JALR优先级最高
+        else if (opcode_EX == `OPCODE_JALR) begin
+            stall_IF = 1'b0;
+            flush_IF = 1'b1;
+            flush_ID = 1'b1;
+            flush_EX = 1'b0;
+        end
+        // Branch次之
+        else if ((opcode_EX == `OPCODE_BRANCH) && branch_taken_EX) begin
+            stall_IF = 1'b0;
+            flush_IF = 1'b1;
+            flush_ID = 1'b1;
+            flush_EX = 1'b0;
+        end
+        else if (opcode_ID == `OPCODE_JAL) begin
+            stall_IF = 1'b0;
+            flush_IF = 1'b1;
+            flush_ID = 1'b0;
+            flush_EX = 1'b0;
         end
         else begin
-            // 没有冒险时，正常执行
-            stall_IF = 1'b0;  // 不暂停IF阶段
-            flush_IF = 1'b0;  // 不清空IF阶段
-            flush_ID = 1'b0;  // 不清空ID阶段
+            stall_IF = 1'b0;
+            flush_IF = 1'b0;
+            flush_ID = 1'b0;
+            flush_EX = 1'b0;
+        end
+
+
+        // NPCOp/NPCImm/base_PC优先级决策
+        if (opcode_EX == `OPCODE_JALR) begin
+            NPCOp_out = `NPC_JALR;
+            NPCImm_out = 32'b0; // JALR用alu_result_EX
+            base_PC_out = PC_EX;
+        end else if ((opcode_EX == `OPCODE_BRANCH) && branch_taken_EX) begin
+            NPCOp_out = `NPC_BRANCH;
+            NPCImm_out = imm_EX;
+            base_PC_out = PC_EX;
+        end else if (opcode_ID == `OPCODE_JAL) begin
+            NPCOp_out = `NPC_JUMP;
+            NPCImm_out = imm_ID;
+            base_PC_out = PC_ID;
+        end else begin
+            NPCOp_out = `NPC_PLUS4;
+            NPCImm_out = 32'b0;
+            base_PC_out = PC_EX;
         end
     end
 endmodule
 ```
 
 停顿旨在解决由ld加载类指令引起的（不能由前递解决的）<font color='#f35336'>**载入-使用型数据冒险**</font>，以及beq类分支指令引起的特殊的**控制冒险**。
+
+### ForwardingUnit
+
+```verilog
+// 转发单元 - 实现数据转发以解决数据冒险
+// 该模块检测数据依赖并生成转发控制信号，将最新数据转发到EX阶段和ID阶段
+module ForwardingUnit(
+    input [4:0] rs1_EX, rs2_EX,    // EX阶段的源寄存器地址
+    input [4:0] rs1_ID, rs2_ID,    // ID阶段的源寄存器地址
+    input [4:0] rd_MEM, rd_WB,     // MEM和WB阶段的目标寄存器地址
+    input RegWrite_MEM, RegWrite_WB, // MEM和WB阶段是否写寄存器
+    output reg [1:0] forward_rs1_EX,  // EX阶段rs1的转发控制信号
+    output reg [1:0] forward_rs2_EX,  // EX阶段rs2的转发控制信号
+    output reg forward_rs1_ID,  // ID阶段rs1的转发控制信号
+    output reg forward_rs2_ID   // ID阶段rs2的转发控制信号
+);
+    always @(*) begin
+        // EX阶段rs1的转发逻辑
+        if (RegWrite_MEM && rd_MEM != 5'b0 && rd_MEM == rs1_EX)
+            // 如果MEM阶段写寄存器且目标寄存器与EX阶段的rs1相同
+            forward_rs1_EX = 2'b01;  // 从MEM阶段转发数据
+        else if (RegWrite_WB && rd_WB != 5'b0 && rd_WB == rs1_EX)
+            // 如果WB阶段写寄存器且目标寄存器与EX阶段的rs1相同
+            forward_rs1_EX = 2'b10;  // 从WB阶段转发数据
+        else
+            // 没有数据依赖，不需要转发
+            forward_rs1_EX = 2'b00;  // 不转发，使用寄存器堆中的数据
+            
+        // EX阶段rs2的转发逻辑（与rs1类似）
+        if (RegWrite_MEM && rd_MEM != 5'b0 && rd_MEM == rs2_EX)
+            // 如果MEM阶段写寄存器且目标寄存器与EX阶段的rs2相同
+            forward_rs2_EX = 2'b01;  // 从MEM阶段转发数据
+        else if (RegWrite_WB && rd_WB != 5'b0 && rd_WB == rs2_EX)
+            // 如果WB阶段写寄存器且目标寄存器与EX阶段的rs2相同
+            forward_rs2_EX = 2'b10;  // 从WB阶段转发数据
+        else
+            // 没有数据依赖，不需要转发
+            forward_rs2_EX = 2'b00;  // 不转发，使用寄存器堆中的数据
+
+        // 处理Load-Use冒险
+        // 以下处理的是Load与接下来第3条指令的冒险
+        // ID阶段rs1的转发逻辑
+        // 只能从WB阶段转发，因为MEM阶段的数据还没有准备好
+        if (RegWrite_WB && rd_WB != 5'b0 && rd_WB == rs1_ID)
+            forward_rs1_ID = 1'b1;  // 从WB阶段转发数据
+        else
+            forward_rs1_ID = 1'b0;  // 不转发，使用寄存器堆中的数据
+            
+        // ID阶段rs2的转发逻辑
+        if (RegWrite_WB && rd_WB != 5'b0 && rd_WB == rs2_ID)
+            forward_rs2_ID = 1'b1;  // 从WB阶段转发数据
+        else
+            forward_rs2_ID = 1'b0;  // 不转发，使用寄存器堆中的数据
+    end
+endmodule
+```
+
+- 该模块检测数据冒险并生成前递控制信号
+- 当EX阶段的源寄存器与MEM或WB阶段的目标寄存器相同时，会产生数据冒险
+- 通过前递机制，可以将最新的数据直接传递给EX阶段，避免流水线暂停
+- ID阶段的前递信号只有1位，因为只能从WB阶段前递
+- EX阶段的前递信号有2位，可以区分从MEM阶段前递(01)和从WB阶段前递(10)
 
 - 在不引入指令顺序调整的时候，解决此类冒险需要依赖一个进行冒险检测，并插入空指令（即停顿）的控制单元。
 	检查条件同时成立时需要停顿：
@@ -468,18 +584,96 @@ ctrl ctrl_unit(
         .Op(opcode_ID), 
         .Funct7(funct7_ID), 
         .Funct3(funct3_ID), 
-        .Zero(Zero_ID),
-    
         .RegWrite(RegWrite_ID), 
         .MemWrite(MemWrite_ID), 
         .MemRead(MemRead_ID),
         .EXTOp(EXTOp_ID), 
         .ALUOp(ALUOp_ID), 
-        .NPCOp(NPCOp_ID),
         .ALUSrc(ALUSrc_ID), 
-        .GPRSel(GPRSel_ID), 
         .WDSel(WDSel_ID), 
         .DMType(DMType_ID)
+    );
+```
+
+### HazardDetectionUnit
+
+```verilog
+HazardDetectionUnit hazard_detection_unit(
+        .rs1_ID(rs1_ID),
+        .rs2_ID(rs2_ID),
+        .rd_EX(rd_addr_EX),
+        .rd_MEM(rd_addr_MEM),
+        .MemRead_EX(MemRead_EX),
+        .RegWrite_EX(RegWrite_EX),
+        .RegWrite_MEM(RegWrite_MEM),
+        .opcode_EX(opcode_EX),           // EX阶段的opcode
+        .funct3_EX(funct3_EX),           // EX阶段的funct3
+        .branch_taken_EX(branch_taken_EX), // EX阶段分支是否被采取
+        .opcode_ID(opcode_ID),           // ID阶段的opcode，用于检测JAL指令
+        .imm_EX(imm_EX),                 // EX阶段立即数
+        .imm_ID(imm_ID),                 // ID阶段立即数
+        .alu_result_EX(alu_result_EX),   // EX阶段ALU输出
+        .PC_EX(PC_EX),                   // EX阶段PC
+        .PC_ID(PC_ID),                   // ID阶段PC
+        .stall_IF(stall_IF),
+        .flush_IF(flush_IF),
+        .flush_ID(flush_ID),
+        .flush_EX(flush_EX),
+        .NPCOp_out(npc_op_sel),
+        .NPCImm_out(npc_imm_sel),
+        .base_PC_out(npc_base_pc)
+    );
+```
+
+### ForwardingUnit
+
+```verilog
+ForwardingUnit forwarding_unit(
+        .rs1_EX(rs1_addr_EX),
+        .rs2_EX(rs2_addr_EX),
+        .rs1_ID(rs1_ID),
+        .rs2_ID(rs2_ID),
+        .rd_MEM(rd_addr_MEM),
+        .rd_WB(rd_addr_WB),
+        .RegWrite_MEM(RegWrite_MEM),
+        .RegWrite_WB(RegWrite_WB),
+        .forward_rs1_EX(forward_rs1_EX),
+        .forward_rs2_EX(forward_rs2_EX),
+        .forward_rs1_ID(forward_rs1_ID),
+        .forward_rs2_ID(forward_rs2_ID)
+    );
+```
+
+### EXT
+
+```verilog
+EXT ext_unit(
+        .iimm_shamt(iimm_shamt_ID), 
+        .iimm(iimm_ID), 
+        .simm(simm_ID), 
+        .bimm(bimm_ID),
+        .uimm(uimm_ID), 
+        .jimm(jimm_ID),
+        .EXTOp(EXTOp_ID), 
+        .immout(imm_ID)
+    );
+```
+
+### RF
+
+```verilog
+RF rf_unit(
+        .clk(clk), 
+        .rst(rst), 
+        .RFWr(RegWrite_WB),
+        .A1(rs1_ID), 
+        .A2(rs2_ID), 
+        .A3(rd_addr_WB),
+        .WD(wb_data_WB), 
+        .RD1(rs1_data_ID), 
+        .RD2(rs2_data_ID),
+        .reg_sel(reg_sel),
+        .reg_data(reg_data)
     );
 ```
 
@@ -538,8 +732,12 @@ ctrl ctrl_unit(
 
 module alu( input  [31:0] A, B,       // ALU 32-bit Inputs                 
             input  [4:0]  ALUOp,      // ALU Operation
-            output reg [31:0] Result, // ALU 32-bit Output
-            output Zero);             // Zero Flag
+            output reg [31:0] C,      // ALU 32-bit Output
+            output Zero,              // Zero Flag
+            input [31:0] PC,          // PC for auipc
+            output Sign,              // Sign Flag
+            output Overflow,          // Overflow Flag
+            output Carry);            // Carry Flag
 
     wire [31:0] shamt;
     assign shamt = {27'b0, B[4:0]};  // 移位量，取B的低5位
@@ -547,41 +745,48 @@ module alu( input  [31:0] A, B,       // ALU 32-bit Inputs
     always @(*) begin
         case (ALUOp)
             // 特殊类型指令
-            `ALU_CTRL_LUI:   Result = B;                    // lui: 将立即数加载到高位
-            `ALU_CTRL_AUIPC: Result = A + B;                // auipc: PC + 立即数
+            `ALU_CTRL_LUI:   C = B;                    // lui: 将立即数加载到高位
+            `ALU_CTRL_AUIPC: C = PC + B;               // auipc: PC + 立即数
             
             // 算术运算
-            `ALU_CTRL_ADD:   Result = A + B;                // add/addi: 加法
-            `ALU_CTRL_SUB:   Result = A - B;                // sub: 减法
-            `ALU_CTRL_SLT:   Result = ($signed(A) < $signed(B)) ? 32'd1 : 32'd0;  // slt/slti: 有符号比较
-            `ALU_CTRL_SLTU:  Result = (A < B) ? 32'd1 : 32'd0;                    // sltu/sltiu: 无符号比较
+            `ALU_CTRL_ADD:   C = A + B;                // add/addi: 加法
+            `ALU_CTRL_SUB:   C = A - B;                // sub: 减法
+            `ALU_CTRL_SLT:   C = ($signed(A) < $signed(B)) ? 32'd1 : 32'd0;  // slt/slti: 有符号比较
+            `ALU_CTRL_SLTU:  C = (A < B) ? 32'd1 : 32'd0;                    // sltu/sltiu: 无符号比较
             
             // 逻辑运算
-            `ALU_CTRL_XOR:   Result = A ^ B;                // xor/xori: 异或
-            `ALU_CTRL_OR:    Result = A | B;                // or/ori: 或
-            `ALU_CTRL_AND:   Result = A & B;                // and/andi: 与
+            `ALU_CTRL_XOR:   C = A ^ B;                // xor/xori: 异或
+            `ALU_CTRL_OR:    C = A | B;                // or/ori: 或
+            `ALU_CTRL_AND:   C = A & B;                // and/andi: 与
             
             // 移位运算
-            `ALU_CTRL_SLL:   Result = A << shamt;           // sll/slli: 逻辑左移
-            `ALU_CTRL_SRL:   Result = A >> shamt;           // srl/srli: 逻辑右移
-            `ALU_CTRL_SRA:   Result = $signed(A) >>> shamt; // sra/srai: 算术右移
+            `ALU_CTRL_SLL:   C = A << shamt;           // sll/slli: 逻辑左移
+            `ALU_CTRL_SRL:   C = A >> shamt;           // srl/srli: 逻辑右移
+            `ALU_CTRL_SRA:   C = $signed(A) >>> shamt; // sra/srai: 算术右移
             
             // 分支比较
-            `ALU_CTRL_BEQ:   Result = (A == B) ? 32'd1 : 32'd0;  // beq: 相等比较
-            `ALU_CTRL_BNE:   Result = (A != B) ? 32'd1 : 32'd0;  // bne: 不等比较
-            `ALU_CTRL_BLT:   Result = ($signed(A) < $signed(B)) ? 32'd1 : 32'd0;  // blt: 有符号小于
-            `ALU_CTRL_BGE:   Result = ($signed(A) >= $signed(B)) ? 32'd1 : 32'd0; // bge: 有符号大于等于
-            `ALU_CTRL_BLTU:  Result = (A < B) ? 32'd1 : 32'd0;                    // bltu: 无符号小于
-            `ALU_CTRL_BGEU:  Result = (A >= B) ? 32'd1 : 32'd0;                   // bgeu: 无符号大于等于
+            `ALU_CTRL_BEQ:   C = (A == B) ? 32'd1 : 32'd0;  // beq: 相等比较
+            `ALU_CTRL_BNE:   C = (A != B) ? 32'd1 : 32'd0;  // bne: 不等比较
+            `ALU_CTRL_BLT:   C = ($signed(A) < $signed(B)) ? 32'd1 : 32'd0;  // blt: 有符号小于
+            `ALU_CTRL_BGE:   C = ($signed(A) >= $signed(B)) ? 32'd1 : 32'd0; // bge: 有符号大于等于
+            `ALU_CTRL_BLTU:  C = (A < B) ? 32'd1 : 32'd0;                    // bltu: 无符号小于
+            `ALU_CTRL_BGEU:  C = (A >= B) ? 32'd1 : 32'd0;                   // bgeu: 无符号大于等于
             
             // 地址计算
-            `ALU_CTRL_ADDR:  Result = A + B;                // load/store: 地址计算
+            `ALU_CTRL_ADDR:  C = A + B;                // load/store: 地址计算
             
-            default:         Result = 32'h0;
+            default:         C = 32'h0;
         endcase
     end
     
-    assign Zero = (Result == 32'h0);  // 零标志位
+    assign Zero = (C == 32'h0);  // 零标志位
+    assign Sign = C[31];         // 符号标志位
+    assign Overflow = (ALUOp == `ALU_CTRL_ADD) ? 
+                      ((A[31] == B[31]) && (A[31] != C[31])) :
+                      (ALUOp == `ALU_CTRL_SUB) ? 
+                      ((A[31] != B[31]) && (A[31] != C[31])) : 1'b0;  // 溢出标志位
+    assign Carry = (ALUOp == `ALU_CTRL_ADD) ? (C < A) :
+                   (ALUOp == `ALU_CTRL_SUB) ? (A < B) : 1'b0;        // 进位标志位
     
 endmodule
 ```
@@ -593,45 +798,7 @@ endmodule
 
 ### ForwardingUnit
 
-```verilog
-// 前递单元 - 检测和处理数据冒险
-// 当检测到数据冒险时，从流水线后端前递数据到EX阶段
-module ForwardingUnit(
-    input [4:0] rs1_EX, rs2_EX,      // EX阶段的源寄存器地址
-    input [4:0] rd_MEM, rd_WB,       // MEM和WB阶段的目标寄存器地址
-    input RegWrite_MEM, RegWrite_WB, // MEM和WB阶段是否写寄存器
-    output reg [1:0] ForwardA,       // rs1的前递选择信号
-    output reg [1:0] ForwardB        // rs2的前递选择信号
-);
-    always @(*) begin
-        // 前递A（rs1）的逻辑
-        if (RegWrite_MEM && (rd_MEM != 5'b0) && (rd_MEM == rs1_EX)) begin
-            ForwardA = 2'b10;  // 从MEM阶段前递
-        end
-        else if (RegWrite_WB && (rd_WB != 5'b0) && (rd_WB == rs1_EX)) begin
-            ForwardA = 2'b01;  // 从WB阶段前递
-        end
-        else begin
-            ForwardA = 2'b00;  // 不使用前递
-        end
-        
-        // 前递B（rs2）的逻辑
-        if (RegWrite_MEM && (rd_MEM != 5'b0) && (rd_MEM == rs2_EX)) begin
-            ForwardB = 2'b10;  // 从MEM阶段前递
-        end
-        else if (RegWrite_WB && (rd_WB != 5'b0) && (rd_WB == rs2_EX)) begin
-            ForwardB = 2'b01;  // 从WB阶段前递
-        end
-        else begin
-            ForwardB = 2'b00;  // 不使用前递
-        end
-    end
-endmodule
-```
-
-- 该模块检测数据冒险并生成前递控制信号
-- 当EX阶段的源寄存器与MEM或WB阶段的目标寄存器相同时，会产生数据冒险
-- 通过前递机制，可以将最新的数据直接传递给EX阶段，避免流水线暂停
+注意：ForwardingUnit的完整实现已在ID阶段部分给出，这里不再重复。
 
 ### ID_EX_Reg
 
@@ -729,41 +896,30 @@ endmodule
 ### ALU
 
 ```verilog
-// EX阶段
-    // 前递单元
-    ForwardingUnit forwarding_unit(
-        .rs1_EX(rs1_EX),
-        .rs2_EX(rs2_EX),
-        .rd_MEM(rd_MEM),
-        .rd_WB(rd_WB),
-        .RegWrite_MEM(RegWrite_MEM),
-        .RegWrite_WB(RegWrite_WB),
-        .ForwardA(ForwardA),
-        .ForwardB(ForwardB)
-    );
-    
-    // 前递数据选择
-    wire [31:0] rs1_data_forward, rs2_data_forward;
-    assign rs1_data_forward = (ForwardA == 2'b10) ? alu_result_MEM :
-                              (ForwardA == 2'b01) ? wb_data :
-                              rs1_data_EX;
-    assign rs2_data_forward = (ForwardB == 2'b10) ? alu_result_MEM :
-                              (ForwardB == 2'b01) ? wb_data :
-                              rs2_data_EX;
-    
-    // ALU操作数选择
-    wire [31:0] alu_operand_a, alu_operand_b;
-    assign alu_operand_a = rs1_data_forward;
-    assign alu_operand_b = ALUSrc_EX ? imm_EX : rs2_data_forward;
-    
-    // ALU
-    alu alu_unit(
-        .A(alu_operand_a),
-        .B(alu_operand_b),
-        .ALUOp(ALUOp_EX),
-        .Result(alu_result_EX),
-        .Zero(Zero_EX)
-    );
+// EX阶段前递逻辑 - 根据前递单元的输出选择数据源
+assign rs1_data_forwarded_EX = (forward_rs1_EX == 2'b01) ? alu_result_MEM :  // 从MEM阶段前递
+                               (forward_rs1_EX == 2'b10) ? wb_data_WB :       // 从WB阶段前递
+                               rs1_data_EX;                                // 不使用前递
+
+assign rs2_data_forwarded_EX = (forward_rs2_EX == 2'b01) ? alu_result_MEM :  // 从MEM阶段前递
+                               (forward_rs2_EX == 2'b10) ? wb_data_WB :       // 从WB阶段前递
+                               rs2_data_EX;                                // 不使用前递
+
+// ALU B operand selection
+assign alu_B_EX = ALUSrc_EX ? imm_EX : rs2_data_forwarded_EX;
+
+// ALU
+alu alu_unit(
+    .A(rs1_data_forwarded_EX), 
+    .B(alu_B_EX), 
+    .ALUOp(ALUOp_EX),
+    .C(alu_result_EX), 
+    .Zero(Zero_EX), 
+    .PC(PC_EX),
+    .Sign(Sign_EX),
+    .Overflow(Overflow_EX),
+    .Carry(Carry_EX)
+);
 ```
 
 ### ForwardingUnit
@@ -837,64 +993,78 @@ endmodule
 
 ```verilog
 `include "ctrl_encode_def.v"
-
-module dm( input         clk, rst,
-           input         MemWrite, MemRead,
-           input  [31:0] addr, wdata,
-           input  [2:0]  DMType,
-           output [31:0] rdata);
-
-    reg [31:0] dm[1023:0];  // 1KB数据存储器
-    integer i;
-    
-    // 复位时清零存储器
-    always @(posedge clk, posedge rst) begin
-        if (rst) begin
-            for (i = 0; i < 1024; i = i + 1) begin
-                dm[i] <= 32'h0;
+// 数据存储器模块 - 支持字节、半字、字的读写操作
+// 该模块实现了RISC-V RV32I指令集中的所有存储器访问指令
+module dm(clk, DMWr, DMType, addr, din, dout);
+   input          clk;        // 时钟信号
+   input          DMWr;       // 存储器写使能信号 (1=写, 0=读)
+   input  [2:0]   DMType;     // 存储器访问类型控制信号
+   input  [31:0]  addr;       // 存储器地址 (完整32位地址)
+   input  [31:0]  din;        // 写入数据 (32位)
+   output [31:0]  dout;       // 读出数据 (32位)
+     
+   reg [31:0] dmem[127:0];    // 数据存储器数组，128个字，每个字32位
+   wire [31:0] mem_data;      // 从存储器读取的原始数据
+   wire [1:0] byte_offset;    // 字节偏移量 (地址的低2位)
+   wire [6:0] word_addr;      // 字地址 (地址的高7位)
+   integer i;
+   
+   initial begin
+      for (i = 0; i < 128; i = i + 1)
+          dmem[i] = 32'b0;
+   end
+   
+   // 计算字地址和字节偏移量
+   assign word_addr = addr[8:2];     // 字地址：地址的高7位
+   assign byte_offset = addr[1:0];   // 字节偏移：地址的低2位
+   
+   // 从存储器读取原始数据 (字对齐访问)
+   // 当地址超出物理内存空间时（addr[31:9]不为0）返回0
+   assign mem_data = (addr[31:9] != 23'b0) ? 32'b0 : dmem[word_addr];
+   
+   // 读操作 - 根据访问类型和字节偏移量返回适当的数据
+   assign dout = (DMType == `DM_WORD) ? mem_data :                    // 字访问：直接返回32位数据
+                 (DMType == `DM_HALFWORD) ?                           // 半字访问：有符号扩展
+                   (byte_offset[1] ? {16'b0, mem_data[31:16]} : {16'b0, mem_data[15:0]}) :
+                 (DMType == `DM_HALFWORD_UNSIGNED) ?                  // 半字访问：无符号扩展
+                   (byte_offset[1] ? {16'b0, mem_data[31:16]} : {16'b0, mem_data[15:0]}) :
+                 (DMType == `DM_BYTE) ?                               // 字节访问：有符号扩展
+                   (byte_offset == 2'b00 ? {24'b0, mem_data[7:0]} :   // 字节0
+                    byte_offset == 2'b01 ? {24'b0, mem_data[15:8]} :  // 字节1
+                    byte_offset == 2'b10 ? {24'b0, mem_data[23:16]} : // 字节2
+                    {24'b0, mem_data[31:24]}) :                       // 字节3
+                 (DMType == `DM_BYTE_UNSIGNED) ?                      // 字节访问：无符号扩展
+                   (byte_offset == 2'b00 ? {24'b0, mem_data[7:0]} :   // 字节0
+                    byte_offset == 2'b01 ? {24'b0, mem_data[15:8]} :  // 字节1
+                    byte_offset == 2'b10 ? {24'b0, mem_data[23:16]} : // 字节2
+                    {24'b0, mem_data[31:24]}) :                       // 字节3
+                 mem_data;                                             // 默认返回字数据
+   
+   // 写操作 - 在时钟上升沿执行
+   always @(posedge clk) begin
+      if (DMWr && (addr[31:9] == 23'b0)) begin  // 当写使能有效且地址在有效范围内时
+         case (DMType)
+            `DM_WORD: begin  // 字写入：直接写入32位数据
+               dmem[word_addr] <= din;  // 写入整个字
             end
-        end
-        else if (MemWrite) begin
-            case (DMType)
-                `DM_CTRL_WORD:  dm[addr[11:2]] <= wdata;                    // sw: 写32位
-                `DM_CTRL_HALF:  dm[addr[11:2]][15:0] <= wdata[15:0];       // sh: 写16位
-                `DM_CTRL_BYTE:  dm[addr[11:2]][7:0] <= wdata[7:0];         // sb: 写8位
-                default:        dm[addr[11:2]] <= wdata;
-            endcase
-        end
-    end
+            `DM_HALFWORD: begin  // 半字写入：写入16位数据
+               if (byte_offset[1])  // 如果偏移量是2或3，写入高16位
+                  dmem[word_addr][31:16] <= din[15:0];
+               else                 // 如果偏移量是0或1，写入低16位
+                  dmem[word_addr][15:0] <= din[15:0];
+            end
+            `DM_BYTE: begin  // 字节写入：写入8位数据
+               case (byte_offset)  // 根据字节偏移量选择写入位置
+                  2'b00: dmem[word_addr][7:0] <= din[7:0];    // 字节0
+                  2'b01: dmem[word_addr][15:8] <= din[7:0];   // 字节1
+                  2'b10: dmem[word_addr][23:16] <= din[7:0];  // 字节2
+                  2'b11: dmem[word_addr][31:24] <= din[7:0];  // 字节3
+               endcase
+            end
+         endcase
+      end
+   end
     
-    // 读取数据
-    wire [31:0] raw_data = dm[addr[11:2]];
-    wire [1:0] byte_offset = addr[1:0];
-    wire [15:0] half_offset = addr[1];
-    
-    assign rdata = MemRead ? 
-        case (DMType)
-            `DM_CTRL_WORD:  raw_data;                    // lw: 读32位
-            `DM_CTRL_HALF:  half_offset ? 
-                {{16{raw_data[31]}}, raw_data[31:16]} :  // lh: 读高16位
-                {{16{raw_data[15]}}, raw_data[15:0]};    // lh: 读低16位
-            `DM_CTRL_HALF_U: half_offset ? 
-                {16'h0, raw_data[31:16]} :               // lhu: 读高16位（无符号）
-                {16'h0, raw_data[15:0]};                 // lhu: 读低16位（无符号）
-            `DM_CTRL_BYTE:  byte_offset == 2'b11 ? 
-                {{24{raw_data[31]}}, raw_data[31:24]} :  // lb: 读最高8位
-                byte_offset == 2'b10 ? 
-                {{24{raw_data[23]}}, raw_data[23:16]} :  // lb: 读次高8位
-                byte_offset == 2'b01 ? 
-                {{24{raw_data[15]}}, raw_data[15:8]} :   // lb: 读次低8位
-                {{24{raw_data[7]}}, raw_data[7:0]};      // lb: 读最低8位
-            `DM_CTRL_BYTE_U: byte_offset == 2'b11 ? 
-                {24'h0, raw_data[31:24]} :               // lbu: 读最高8位（无符号）
-                byte_offset == 2'b10 ? 
-                {24'h0, raw_data[23:16]} :               // lbu: 读次高8位（无符号）
-                byte_offset == 2'b01 ? 
-                {24'h0, raw_data[15:8]} :                // lbu: 读次低8位（无符号）
-                {24'h0, raw_data[7:0]};                  // lbu: 读最低8位（无符号）
-            default: raw_data;
-        endcase : 32'h0;
-
 endmodule
 ```
 
@@ -974,16 +1144,10 @@ endmodule
 ```verilog
 // MEM阶段
     // 数据存储器
-    dm dm_unit(
-        .clk(clk),
-        .rst(rst),
-        .MemWrite(MemWrite_MEM),
-        .MemRead(MemRead_MEM),
-        .addr(alu_result_MEM),
-        .wdata(rs2_data_MEM),
-        .DMType(DMType_MEM),
-        .rdata(dm_data_MEM)
-    );
+    assign mem_data_MEM = Data_in;  // 从外部数据输入
+    
+    // 数据存储器实例化（在PipelineCPU中直接使用外部数据）
+    // dm模块在PipelineCPU中通过Data_in信号连接
 ```
 
 ### EX_MEM_Reg
@@ -1205,9 +1369,9 @@ endmodule
 
 | 阶段 | 主要功能 | 关键模块 | 控制信号 |
 |------|----------|----------|----------|
-| IF | 取指令 | PC, NPC | NPCOp |
-| ID | 指令解码 | CTRL, RF, EXT | RegWrite, MemWrite, ALUOp |
-| EX | 执行 | ALU, ForwardingUnit | ALUSrc, ForwardA/B |
+| IF | 取指令 | PC_NPC | NPCOp, stall_IF |
+| ID | 指令解码 | CTRL, RF, EXT, HazardDetectionUnit, ForwardingUnit | RegWrite, MemWrite, ALUOp, forward_rs1_ID, forward_rs2_ID |
+| EX | 执行 | ALU, ForwardingUnit | ALUSrc, forward_rs1_EX, forward_rs2_EX |
 | MEM | 存储器访问 | dm | MemRead, MemWrite, DMType |
 | WB | 写回 | - | WDSel, RegWrite |
 
@@ -1215,9 +1379,9 @@ endmodule
 
 | 冒险类型 | 检测单元 | 处理方法 | 影响阶段 |
 |----------|----------|----------|----------|
-| 数据冒险 | ForwardingUnit | 前递 | EX |
-| Load-Use冒险 | HazardDetectionUnit | 暂停 | IF, ID |
-| 控制冒险 | CTRL | 清空 | IF, ID |
+| 数据冒险 | ForwardingUnit | 前递 | EX, ID |
+| Load-Use冒险 | HazardDetectionUnit | 暂停+前递 | IF, ID, EX |
+| 控制冒险 | HazardDetectionUnit | 清空 | IF, ID, EX |
 
 ## 关键设计要点
 
@@ -1225,6 +1389,17 @@ endmodule
 2. **冒险处理**：完整的数据冒险和控制冒险处理机制
 3. **控制信号传递**：控制信号随数据在流水线中传递
 4. **前递机制**：有效减少数据冒险导致的性能损失
+   - EX阶段：2位前递信号，支持MEM和WB阶段前递
+   - ID阶段：1位前递信号，仅支持WB阶段前递
 5. **存储器对齐**：正确处理不同宽度的存储器访问
+6. **地址检查**：dm模块检查地址范围，超出物理内存空间时返回0
+7. **分支预测**：支持JAL、JALR和条件分支指令的控制冒险处理
 
-这个五级流水线CPU实现了RISC-V RV32I指令集的完整功能，通过流水线技术提高了指令执行效率，通过冒险处理机制保证了执行正确性。
+## 最新改进
+
+1. **ID阶段前递**：实现了从WB阶段到ID阶段的前递，解决了Load-Use冒险
+2. **地址保护**：dm模块增加了地址范围检查，提高系统安全性
+3. **信号优化**：ID阶段前递信号从2位优化为1位，减少硬件开销
+4. **完整冒险处理**：支持Load-Use冒险、数据冒险和控制冒险的完整处理
+
+这个五级流水线CPU实现了RISC-V RV32I指令集的完整功能，通过流水线技术提高了指令执行效率，通过冒险处理机制保证了执行正确性。最新的改进进一步提升了CPU的性能和安全性。
