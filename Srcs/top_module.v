@@ -54,7 +54,7 @@ module top_module(
     end
 
     // 根据 sw_i[15] 控制时钟分频速率
-    assign Clk_CPU = (sw_i[15]) ? clkdiv[27] : clkdiv[24];
+    assign Clk_CPU = (sw_i[15]) ? clkdiv[27] : clkdiv[20];
     assign Clk_instr = Clk_CPU & ~sw_i[1]; // CPU工作时钟与控制信号 sw_i[1] 结合,此处开关设为1时停止执行指令
     
     // 数码管独立时钟 - 使用较高频率（约1KHz）确保刷新速度足够快

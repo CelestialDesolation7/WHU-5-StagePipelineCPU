@@ -225,6 +225,7 @@ module PipelineCPU(
         .rd_EX(rd_addr_EX),
         .rd_MEM(rd_addr_MEM),
         .MemRead_EX(MemRead_EX),
+        .MemRead_MEM(MemRead_MEM),
         .RegWrite_EX(RegWrite_EX),
         .RegWrite_MEM(RegWrite_MEM),
         .opcode_EX(opcode_EX),           // EX阶段的opcode
