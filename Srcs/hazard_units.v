@@ -16,7 +16,6 @@ module HazardDetectionUnit(
     input [31:0] PC_EX,           // EX阶段PC
     input [31:0] PC_ID,           // ID阶段PC
     output reg stall_IF,           // 暂停IF阶段的信号
-    output reg flush_IF,           // 清空IF阶段的信号
     output reg flush_ID,           // 清空ID阶段的信号
     output reg flush_EX,           // 清空EX阶段的信号
     output reg [2:0] NPCOp_out,
@@ -38,37 +37,33 @@ module HazardDetectionUnit(
     always @(*) begin
         // Load-Use冒险检测逻辑
         // 当EX阶段是Load指令且目标寄存器与ID阶段的源寄存器相同时会发生冒险
+        // 此处处理的是Load与接下来第一条指令的冒险
         if (MemRead_EX && 
             ((rd_EX == rs1_ID && rs1_ID != 5'b0) ||    // EX阶段目标寄存器与ID阶段rs1相同
              (rd_EX == rs2_ID && rs2_ID != 5'b0))) begin // EX阶段目标寄存器与ID阶段rs2相同
             stall_IF = 1'b1;  // 暂停PC和IF/ID寄存器
-            flush_IF = 1'b0;  // IF阶段不需要冲刷，stall会使其保持
             flush_ID = 1'b0;  // ID阶段不需要冲刷，stall会使其保持
             flush_EX = 1'b1;  // 向EX阶段插入一个气泡 (NOP)
         end
         // JALR优先级最高
         else if (opcode_EX == `OPCODE_JALR) begin
             stall_IF = 1'b0;
-            flush_IF = 1'b1;
             flush_ID = 1'b1;
             flush_EX = 1'b0;
         end
         // Branch次之
         else if ((opcode_EX == `OPCODE_BRANCH) && branch_taken_EX) begin
             stall_IF = 1'b0;
-            flush_IF = 1'b1;
             flush_ID = 1'b1;
-            flush_EX = 1'b0;
+            flush_EX = 1'b1;
         end
         else if (opcode_ID == `OPCODE_JAL) begin
             stall_IF = 1'b0;
-            flush_IF = 1'b1;
-            flush_ID = 1'b0;
+            flush_ID = 1'b1;
             flush_EX = 1'b0;
         end
         else begin
             stall_IF = 1'b0;
-            flush_IF = 1'b0;
             flush_ID = 1'b0;
             flush_EX = 1'b0;
         end
@@ -104,8 +99,8 @@ module ForwardingUnit(
     input RegWrite_MEM, RegWrite_WB, // MEM和WB阶段是否写寄存器
     output reg [1:0] forward_rs1_EX,  // EX阶段rs1的转发控制信号
     output reg [1:0] forward_rs2_EX,  // EX阶段rs2的转发控制信号
-    output reg [1:0] forward_rs1_ID,  // ID阶段rs1的转发控制信号
-    output reg [1:0] forward_rs2_ID   // ID阶段rs2的转发控制信号
+    output reg forward_rs1_ID,  // ID阶段rs1的转发控制信号
+    output reg forward_rs2_ID   // ID阶段rs2的转发控制信号
 );
     always @(*) begin
         // EX阶段rs1的转发逻辑
@@ -130,17 +125,19 @@ module ForwardingUnit(
             // 没有数据依赖，不需要转发
             forward_rs2_EX = 2'b00;  // 不转发，使用寄存器堆中的数据
 
+        // 处理Load-Use冒险
+        // 以下处理的是Load与接下来第3条指令的冒险
         // ID阶段rs1的转发逻辑
         // 只能从WB阶段转发，因为MEM阶段的数据还没有准备好
         if (RegWrite_WB && rd_WB != 5'b0 && rd_WB == rs1_ID)
-            forward_rs1_ID = 2'b10;  // 从WB阶段转发数据
+            forward_rs1_ID = 1'b1;  // 从WB阶段转发数据
         else
-            forward_rs1_ID = 2'b00;  // 不转发，使用寄存器堆中的数据
+            forward_rs1_ID = 1'b0;  // 不转发，使用寄存器堆中的数据
             
         // ID阶段rs2的转发逻辑
         if (RegWrite_WB && rd_WB != 5'b0 && rd_WB == rs2_ID)
-            forward_rs2_ID = 2'b10;  // 从WB阶段转发数据
+            forward_rs2_ID = 1'b1;  // 从WB阶段转发数据
         else
-            forward_rs2_ID = 2'b00;  // 不转发，使用寄存器堆中的数据
+            forward_rs2_ID = 1'b0;  // 不转发，使用寄存器堆中的数据
     end
 endmodule 

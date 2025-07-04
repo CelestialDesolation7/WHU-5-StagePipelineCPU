@@ -106,7 +106,7 @@ endmodule
 module EX_MEM_Reg(
     input clk,
     input rst,
-    input flush,
+    
     input [31:0] alu_result_in,
     input [31:0] rs2_data_in,
     input [31:0] instr_in,
@@ -128,17 +128,6 @@ module EX_MEM_Reg(
 );
     always @(posedge clk or posedge rst) begin
         if (rst) begin
-            alu_result_out <= 32'h0;
-            rs2_data_out <= 32'h0;
-            instr_out <= 32'h00000013;
-            RegWrite_out <= 1'b0;
-            MemWrite_out <= 1'b0;
-            MemRead_out <= 1'b0;
-            WDSel_out <= 2'h0;
-            DMType_out <= 3'h0;
-            PC_out <= 32'h0;
-        end
-        else if (flush) begin
             alu_result_out <= 32'h0;
             rs2_data_out <= 32'h0;
             instr_out <= 32'h00000013;

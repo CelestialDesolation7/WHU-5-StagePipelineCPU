@@ -83,18 +83,7 @@ module PipelineCPU(
     wire RegWrite_WB; // 输出寄存器写使能信号
     wire [1:0] WDSel_WB; // 输出写数据选择信号
     
-    // Hazard detection and forwarding signals
-    wire stall_IF; // 暂停IF阶段
-    wire flush_IF; // 清空IF阶段
-    wire flush_ID; // 清空ID阶段
-    wire flush_EX; // 清空EX阶段
-    wire [1:0] forward_rs1_EX; // EX阶段源寄存器1前递信号
-    wire [1:0] forward_rs2_EX; // EX阶段源寄存器2前递信号
-    wire [1:0] forward_rs1_ID; // ID阶段源寄存器1前递信号
-    wire [1:0] forward_rs2_ID; // ID阶段源寄存器2前递信号
-    wire [31:0] rs1_data_forwarded_EX, rs2_data_forwarded_EX;
-    wire [31:0] rs1_data_forwarded_ID, rs2_data_forwarded_ID;
-    wire branch_taken_EX;
+
     // Control signals wire preparation ends
     // ----------------------------------------------------------------
 
@@ -133,7 +122,20 @@ module PipelineCPU(
     // ----------------------------------------------------------------
 
 
-    
+
+    // ----------------------------------------------------------------
+    // Hazard detection and forwarding signals preparation begins
+    wire stall_IF; // 暂停IF阶段
+    wire flush_ID; // 清空ID阶段
+    wire flush_EX; // 清空EX阶段
+    wire [1:0] forward_rs1_EX; // EX阶段源寄存器1前递信号
+    wire [1:0] forward_rs2_EX; // EX阶段源寄存器2前递信号
+    wire forward_rs1_ID; // ID阶段源寄存器1前递信号
+    wire forward_rs2_ID; // ID阶段源寄存器2前递信号
+    wire [31:0] rs1_data_forwarded_EX, rs2_data_forwarded_EX;
+    wire [31:0] rs1_data_forwarded_ID, rs2_data_forwarded_ID;
+    wire branch_taken_EX;
+
     // Write back data selection
     assign wb_data_WB = (WDSel_WB == `WDSel_FromALU) ? alu_result_WB :
                         (WDSel_WB == `WDSel_FromMEM) ? mem_data_WB :
@@ -150,24 +152,36 @@ module PipelineCPU(
         (funct3_EX == `FUNCT3_BGEU && !Carry_EX)                    // bgeu: 无符号大于等于时跳转
     );
     
-    // Output assignments
-    assign PC_out = PC_IF;
-    assign Addr_out = alu_result_MEM;
-    assign Data_out = rs2_data_MEM;
-    assign mem_w = MemWrite_MEM;
-    assign DMType_out = DMType_MEM;
-    assign debug_data = PC_IF;
 
 
+    // ID阶段前递逻辑 - 从WB阶段前递数据到ID阶段
+    assign rs1_data_forwarded_ID = forward_rs1_ID ? wb_data_WB :  // 从WB阶段前递
+                                   rs1_data_ID;                  // 不使用前递
+    
+    assign rs2_data_forwarded_ID = forward_rs2_ID ? wb_data_WB :  // 从WB阶段前递
+                                   rs2_data_ID;                  // 不使用前递
 
-
-    // ----------------------------------------------------------------
-    // IF Stage Hardware instantiation begins
     // PC_NPC: 统一PC与下一个PC的计算
     // npc_op_sel和npc_imm_sel由HazardDetectionUnit输出
     wire [2:0] npc_op_sel;
     wire [31:0] npc_imm_sel;
     wire [31:0] npc_base_pc;
+
+    // EX阶段前递逻辑 - 根据前递单元的输出选择数据源
+    assign rs1_data_forwarded_EX = (forward_rs1_EX == 2'b01) ? alu_result_MEM :  // 从MEM阶段前递
+                                   (forward_rs1_EX == 2'b10) ? wb_data_WB :       // 从WB阶段前递
+                                   rs1_data_EX;                                // 不使用前递
+    
+    assign rs2_data_forwarded_EX = (forward_rs2_EX == 2'b01) ? alu_result_MEM :  // 从MEM阶段前递
+                                   (forward_rs2_EX == 2'b10) ? wb_data_WB :       // 从WB阶段前递
+                                   rs2_data_EX;                                // 不使用前递
+    
+    // ALU B operand selection
+    assign alu_B_EX = ALUSrc_EX ? imm_EX : rs2_data_forwarded_EX;
+
+    // ----------------------------------------------------------------
+    // IF Stage Hardware instantiation begins
+
 
     PC_NPC pc_npc_unit(
         .clk(clk),
@@ -190,7 +204,7 @@ module PipelineCPU(
     IF_ID_Reg if_id_reg(
         .clk(clk), 
         .rst(rst), 
-        .flush(flush_IF || flush_ID),  // 支持IF和ID阶段的flush
+        .flush(flush_ID),  // 支持IF和ID阶段的flush
         .stall(stall_IF),
         .PC_in(PC_IF), 
         .instr_in(instr_in),
@@ -223,7 +237,6 @@ module PipelineCPU(
         .PC_EX(PC_EX),                   // EX阶段PC
         .PC_ID(PC_ID),                   // ID阶段PC
         .stall_IF(stall_IF),
-        .flush_IF(flush_IF),
         .flush_ID(flush_ID),
         .flush_EX(flush_EX),
         .NPCOp_out(npc_op_sel),
@@ -276,12 +289,7 @@ module PipelineCPU(
         .reg_data(reg_data)
     );
     
-    // ID阶段前递逻辑 - 从WB阶段前递数据到ID阶段
-    assign rs1_data_forwarded_ID = (forward_rs1_ID == 2'b10) ? wb_data_WB :  // 从WB阶段前递
-                                   rs1_data_ID;                              // 不使用前递
-    
-    assign rs2_data_forwarded_ID = (forward_rs2_ID == 2'b10) ? wb_data_WB :  // 从WB阶段前递
-                                   rs2_data_ID;                              // 不使用前递
+
     // ID Stage Hardware instantiation ends
     // ----------------------------------------------------------------
     
@@ -341,17 +349,7 @@ module PipelineCPU(
         .forward_rs2_ID(forward_rs2_ID)
     );
     
-    // EX阶段前递逻辑 - 根据前递单元的输出选择数据源
-    assign rs1_data_forwarded_EX = (forward_rs1_EX == 2'b01) ? alu_result_MEM :  // 从MEM阶段前递
-                                   (forward_rs1_EX == 2'b10) ? wb_data_WB :       // 从WB阶段前递
-                                   rs1_data_EX;                                // 不使用前递
-    
-    assign rs2_data_forwarded_EX = (forward_rs2_EX == 2'b01) ? alu_result_MEM :  // 从MEM阶段前递
-                                   (forward_rs2_EX == 2'b10) ? wb_data_WB :       // 从WB阶段前递
-                                   rs2_data_EX;                                // 不使用前递
-    
-    // ALU B operand selection
-    assign alu_B_EX = ALUSrc_EX ? imm_EX : rs2_data_forwarded_EX;
+
 
     alu alu_unit(
         .A(rs1_data_forwarded_EX), 
@@ -375,7 +373,6 @@ module PipelineCPU(
         .clk(clk), 
         .rst(rst), 
         
-        .flush(flush_EX),
         .alu_result_in(alu_result_EX), 
         .rs2_data_in(rs2_data_forwarded_EX), 
         .instr_in(instr_EX),
@@ -426,5 +423,19 @@ module PipelineCPU(
         .PC_out(PC_WB)
     );
     
+    // MEM stage Hardware instantiation ends
+    // ----------------------------------------------------------------
 
+
+
+    // ----------------------------------------------------------------
+    // Output assignments begins
+    assign PC_out = PC_IF;
+    assign Addr_out = alu_result_MEM;
+    assign Data_out = rs2_data_MEM;
+    assign mem_w = MemWrite_MEM;
+    assign DMType_out = DMType_MEM;
+    assign debug_data = PC_IF;
+    // Output assignments ends
+    // ----------------------------------------------------------------
 endmodule

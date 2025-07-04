@@ -34,7 +34,7 @@ module sccomp_rom_testbench();
         reg_sel = 0;
         #20 rstn = 1;
         // 运行足够多的周期
-        #2000;
+        #30_000;
         $stop;
     end
 endmodule 

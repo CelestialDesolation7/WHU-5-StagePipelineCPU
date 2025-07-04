@@ -25,7 +25,8 @@ module dm(clk, DMWr, DMType, addr, din, dout);
    assign byte_offset = addr[1:0];   // 字节偏移：地址的低2位
    
    // 从存储器读取原始数据 (字对齐访问)
-   assign mem_data = dmem[word_addr];
+   // 当地址超出物理内存空间时（addr[31:9]不为0）返回0
+   assign mem_data = (addr[31:9] != 23'b0) ? 32'b0 : dmem[word_addr];
    
    // 读操作 - 根据访问类型和字节偏移量返回适当的数据
    assign dout = (DMType == `DM_WORD) ? mem_data :                    // 字访问：直接返回32位数据
@@ -47,7 +48,7 @@ module dm(clk, DMWr, DMType, addr, din, dout);
    
    // 写操作 - 在时钟上升沿执行
    always @(posedge clk) begin
-      if (DMWr) begin  // 当写使能有效时
+      if (DMWr && (addr[31:9] == 23'b0)) begin  // 当写使能有效且地址在有效范围内时
          case (DMType)
             `DM_WORD: begin  // 字写入：直接写入32位数据
                dmem[word_addr] <= din;  // 写入整个字
