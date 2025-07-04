@@ -18,7 +18,7 @@ module RF(   input         clk,
     end
       
     else 
-      if (RFWr) begin
+      if (RFWr && A3 != 0) begin
         rf[A3] <= WD;
       end
     
