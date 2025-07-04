@@ -153,21 +153,21 @@ module PC_NPC(
     input [31:0] aluout,
     output reg [31:0] PC
 );
-    
-    wire [31:0] PCPLUS4;
+   
+   wire [31:0] PCPLUS4;
     wire [31:0] NPC;
-    
-    assign PCPLUS4 = PC + 4; // pc + 4
-    
+   
+   assign PCPLUS4 = PC + 4; // pc + 4
+   
     // NPC计算逻辑
-    always @(*) begin
-        case (NPCOp)
-            `NPC_PLUS4:  NPC = PCPLUS4;
+   always @(*) begin
+      case (NPCOp)
+          `NPC_PLUS4:  NPC = PCPLUS4;
             `NPC_BRANCH: NPC = base_PC + IMM;
             `NPC_JUMP:   NPC = base_PC + IMM;
             `NPC_JALR:   NPC = aluout;
-            default:     NPC = PCPLUS4;
-        endcase
+          default:     NPC = PCPLUS4;
+      endcase
     end
     
     // PC更新逻辑
@@ -179,7 +179,7 @@ module PC_NPC(
         else
             PC <= PC;
     end
-      
+   
 endmodule
 ```
 
@@ -193,7 +193,7 @@ endmodule
 1. 这些信号由HazardDetectionUnit生成，用于处理控制冒险。
 2. 这是主要的模块，集成了PC和NPC的功能。
 	- NPCOp, IMM, aluout存储了控制信号等和跳转指令有关的指示数据。
-	- 该模块以此决定将什么指令向后发送。
+- 该模块以此决定将什么指令向后发送。
 	- 当stall=1时PC保持不变。
 
 ## 实例化
@@ -432,14 +432,14 @@ endmodule
 
 	- EXTOp — Immediate Extension Type（立即数类型）
 	
-        | 位号     | 含义                       | 适用指令类型 / 指令                                    |
-        | -------- | -------------------------- | ------------------------------------------------------ |
-        | EXTOp[5] | I-type 移位立即数（shamt） | `slli`, `srli`, `srai`                                 |
-        | EXTOp[4] | I-type 普通立即数          | `addi`, `slti`, `sltiu`, `xori`, `ori`, `andi`, `jalr` |
-        | EXTOp[3] | S-type 存储型立即数        | `sw`, `sh`, `sb`                                       |
-        | EXTOp[2] | B-type 分支型立即数        | `beq`, `bne`, `blt`, `bge`, `bltu`, `bgeu`             |
-        | EXTOp[1] | U-type 高位立即数          | `lui`, `auipc`                                         |
-        | EXTOp[0] | J-type 跳转立即数          | `jal`                                                  |
+   | 位号     | 含义                       | 适用指令类型 / 指令                                    |
+   | -------- | -------------------------- | ------------------------------------------------------ |
+   | EXTOp[5] | I-type 移位立即数（shamt） | `slli`, `srli`, `srai`                                 |
+   | EXTOp[4] | I-type 普通立即数          | `addi`, `slti`, `sltiu`, `xori`, `ori`, `andi`, `jalr` |
+   | EXTOp[3] | S-type 存储型立即数        | `sw`, `sh`, `sb`                                       |
+   | EXTOp[2] | B-type 分支型立即数        | `beq`, `bne`, `blt`, `bge`, `bltu`, `bgeu`             |
+   | EXTOp[1] | U-type 高位立即数          | `lui`, `auipc`                                         |
+   | EXTOp[0] | J-type 跳转立即数          | `jal`                                                  |
 
 	- WDSel — Write Data Select（寄存器写回数据来源）
      
@@ -468,7 +468,7 @@ endmodule
         | `000`           | `3'b000`   | word（32-bit）      | `lw`, `sw`        |
         | `001`           | `3'b001`   | byte（8-bit）       | `lb`, `lbu`, `sb` |
         | `010`           | `3'b010`   | half-word（16-bit） | `lh`, `lhu`, `sh` |
-   
+    
 
 ### HazardDetectionUnit
 
@@ -630,7 +630,7 @@ endmodule
 
 		- 3：对于load-use型数据冒险，当以下 2 个条件同时成立时需要停顿：
 
-			- 指令是ld类加载指令（唯一需要读内存的指令）。
+	- 指令是ld类加载指令（唯一需要读内存的指令）。
 
 				<font color='#f35336'>信号线表示为(ID/EX.MemRead = 1)。</font>
 
@@ -790,7 +790,7 @@ endmodule
       if (RFWr) begin
         rf[A3] <= WD;
       end
-    
+
   assign RD1 = (A1 != 0) ? rf[A1] : 0;
   assign RD2 = (A2 != 0) ? rf[A2] : 0;
 
@@ -1157,22 +1157,22 @@ assign rs1_data_forwarded_EX = (forward_rs1_EX == 2'b01) ? alu_result_MEM :  // 
 assign rs2_data_forwarded_EX = (forward_rs2_EX == 2'b01) ? alu_result_MEM :  // 从MEM阶段前递
                                (forward_rs2_EX == 2'b10) ? wb_data_WB :       // 从WB阶段前递
                                rs2_data_EX;                                // 不使用前递
-
+    
 // ALU B operand selection
 assign alu_B_EX = ALUSrc_EX ? imm_EX : rs2_data_forwarded_EX;
-
-// ALU
-alu alu_unit(
+    
+    // ALU
+    alu alu_unit(
     .A(rs1_data_forwarded_EX), 
     .B(alu_B_EX), 
-    .ALUOp(ALUOp_EX),
+        .ALUOp(ALUOp_EX),
     .C(alu_result_EX), 
     .Zero(Zero_EX), 
     .PC(PC_EX),
     .Sign(Sign_EX),
     .Overflow(Overflow_EX),
     .Carry(Carry_EX)
-);
+    );
 ```
 
 ### ForwardingUnit
@@ -1242,13 +1242,13 @@ module dm(clk, DMWr, DMType, addr, din, dout);
    input  [31:0]  addr;       // 存储器地址 (完整32位地址)
    input  [31:0]  din;        // 写入数据 (32位)
    output [31:0]  dout;       // 读出数据 (32位)
-     
+
    reg [31:0] dmem[127:0];    // 数据存储器数组，128个字，每个字32位
    wire [31:0] mem_data;      // 从存储器读取的原始数据
    wire [1:0] byte_offset;    // 字节偏移量 (地址的低2位)
    wire [6:0] word_addr;      // 字地址 (地址的高7位)
-   integer i;
-   
+    integer i;
+    
    initial begin
       for (i = 0; i < 128; i = i + 1)
           dmem[i] = 32'b0;
@@ -1283,7 +1283,7 @@ module dm(clk, DMWr, DMType, addr, din, dout);
    // 写操作 - 在时钟上升沿执行
    always @(posedge clk) begin
       if (DMWr && (addr[31:9] == 23'b0)) begin  // 当写使能有效且地址在有效范围内时
-         case (DMType)
+            case (DMType)
             `DM_WORD: begin  // 字写入：直接写入32位数据
                dmem[word_addr] <= din;  // 写入整个字
             end
@@ -1301,10 +1301,10 @@ module dm(clk, DMWr, DMType, addr, din, dout);
                   2'b11: dmem[word_addr][31:24] <= din[7:0];  // 字节3
                endcase
             end
-         endcase
-      end
-   end
-    
+            endcase
+        end
+    end
+
 endmodule
 ```
 

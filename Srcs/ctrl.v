@@ -97,23 +97,23 @@ module ctrl(input  [6:0] Op,       // opcode
    
    // ALU operation encoding
    assign ALUOp = (beq) ? `ALU_BEQ :
-                 (bne) ? `ALU_BNE :
-                 (blt) ? `ALU_BLT :
-                 (bge) ? `ALU_BGE :
-                 (bltu) ? `ALU_BLTU :
-                 (bgeu) ? `ALU_BGEU :
-                 (lui) ? `ALU_LUI :
-                 (auipc) ? `ALU_AUIPC :
-                 (addi | add | load | store | jalr) ? `ALU_ADD :
-                 (sub) ? `ALU_SUB :
-                 (slti | slt) ? `ALU_SLT :
-                 (sltiu | sltu) ? `ALU_SLTU :
-                 (xori | xor_op) ? `ALU_XOR :
-                 (ori | or_op) ? `ALU_OR :
-                 (andi | and_op) ? `ALU_AND :
-                 (slli | sll) ? `ALU_SLL :
-                 (srli | srl) ? `ALU_SRL :
-                 (srai | sra) ? `ALU_SRA : `ALU_NOP;
+                (bne) ? `ALU_BNE :
+                (blt) ? `ALU_BLT :
+                (bge) ? `ALU_BGE :
+                (bltu) ? `ALU_BLTU :
+                (bgeu) ? `ALU_BGEU :
+                (lui) ? `ALU_LUI :
+                (auipc) ? `ALU_AUIPC :
+                (addi | add | load | store | jalr) ? `ALU_ADD :
+                (sub) ? `ALU_SUB :
+                (slti | slt) ? `ALU_SLT :
+                (sltiu | sltu) ? `ALU_SLTU :
+                (xori | xor_op) ? `ALU_XOR :
+                (ori | or_op) ? `ALU_OR :
+                (andi | and_op) ? `ALU_AND :
+                (slli | sll) ? `ALU_SLL :
+                (srli | srl) ? `ALU_SRL :
+                (srai | sra) ? `ALU_SRA : `ALU_NOP;
 
    // Data memory access type
    assign DMType[2] = lbu | lhu;
@@ -122,5 +122,5 @@ module ctrl(input  [6:0] Op,       // opcode
 
    // Control signals generation ends
    // ------------------------------------------------------------
-   
+
 endmodule

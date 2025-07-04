@@ -4,7 +4,7 @@
 module HazardDetectionUnit(
     input [4:0] rs1_ID, rs2_ID,    // ID阶段的源寄存器地址
     input [4:0] rd_EX, rd_MEM,     // EX和MEM阶段的目标寄存器地址
-    input MemRead_EX, MemRead_MEM, // EX和MEM阶段是否为Load指令
+    input MemRead_EX,              // EX阶段是否为Load指令
     input RegWrite_EX, RegWrite_MEM, // EX和MEM阶段是否写寄存器
     input [6:0] opcode_EX,         // EX阶段的opcode，用于检测分支指令
     input [2:0] funct3_EX,         // EX阶段的funct3，用于检测分支指令
@@ -41,15 +41,6 @@ module HazardDetectionUnit(
         if (MemRead_EX && 
             ((rd_EX == rs1_ID && rs1_ID != 5'b0) ||    // EX阶段目标寄存器与ID阶段rs1相同
              (rd_EX == rs2_ID && rs2_ID != 5'b0))) begin // EX阶段目标寄存器与ID阶段rs2相同
-            stall_IF = 1'b1;  // 暂停PC和IF/ID寄存器
-            flush_ID = 1'b0;  // ID阶段不需要冲刷，stall会使其保持
-            flush_EX = 1'b1;  // 向EX阶段插入一个气泡 (NOP)
-        end
-        // 检测Load指令与MEM阶段指令之间的数据冒险
-        // 当MEM阶段是Load指令且目标寄存器与ID阶段的源寄存器相同时会发生冒险
-        else if (MemRead_MEM && 
-            ((rd_MEM == rs1_ID && rs1_ID != 5'b0) ||    // MEM阶段目标寄存器与ID阶段rs1相同
-             (rd_MEM == rs2_ID && rs2_ID != 5'b0))) begin // MEM阶段目标寄存器与ID阶段rs2相同
             stall_IF = 1'b1;  // 暂停PC和IF/ID寄存器
             flush_ID = 1'b0;  // ID阶段不需要冲刷，stall会使其保持
             flush_EX = 1'b1;  // 向EX阶段插入一个气泡 (NOP)
