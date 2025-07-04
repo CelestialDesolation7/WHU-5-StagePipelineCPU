@@ -1,13 +1,12 @@
 `timescale 1ns/1ps
 module sccomp_rom_testbench();
     reg clk, rstn;
-    reg [4:0] reg_sel;
+    wire [4:0] reg_sel = 5'd2;
     wire [31:0] reg_data;
     wire [31:0] instr;
     wire [31:0] PC_out;
-    wire [31:0] Addr_out;
-    wire [31:0] Data_out;
-    wire [2:0] DMType_out;
+    wire [31:0] mem_addr_out;
+    wire [31:0] mem_data_out;
     wire [31:0] debug_data;
 
     // 实例化sccomp
@@ -18,9 +17,8 @@ module sccomp_rom_testbench();
         .reg_data(reg_data),
         .instr(instr),
         .PC_out(PC_out),
-        .Addr_out(Addr_out),
-        .Data_out(Data_out),
-        .DMType_out(DMType_out),
+        .mem_addr_out(mem_addr_out),
+        .mem_data_out(mem_data_out),
         .debug_data(debug_data)
     );
 
@@ -31,7 +29,6 @@ module sccomp_rom_testbench();
     // 测试流程
     initial begin
         rstn = 0;
-        reg_sel = 0;
         #20 rstn = 1;
         // 运行足够多的周期
         #30_000;

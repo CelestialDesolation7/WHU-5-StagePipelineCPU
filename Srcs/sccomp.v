@@ -1,13 +1,12 @@
-module sccomp(clk, rstn, reg_sel, reg_data, instr, PC_out, Addr_out, Data_out, DMType_out, debug_data);
+module sccomp(clk, rstn, reg_sel, reg_data, instr, PC_out, mem_addr_out, mem_data_out, debug_data);
    input          clk;
    input          rstn;
    input [4:0]    reg_sel;
    output [31:0]  reg_data;
    output [31:0]  instr;
    output [31:0]  PC_out;
-   output [31:0]  Addr_out;
-   output [31:0]  Data_out;
-   output [2:0]   DMType_out;
+   output [31:0]  mem_addr_out;      // 内存访问地址输出
+   output [31:0]  mem_data_out;      // 内存访问数据输出
    output [31:0]  debug_data;
    
    wire [31:0]    PC;
@@ -20,9 +19,14 @@ module sccomp(clk, rstn, reg_sel, reg_data, instr, PC_out, Addr_out, Data_out, D
    
    // 输出PC
    assign PC_out = PC;
-   // 输出地址和数据
-   assign Addr_out = dm_addr;
-   assign Data_out = dm_din;
+   
+   // 输出内存访问地址
+   assign mem_addr_out = dm_addr;
+   
+   // 根据读写状态输出相应数据
+   // 如果CPU正在向内存写数据，输出写入的数据
+   // 如果内存正在被读，输出读到的数据
+   assign mem_data_out = MemWrite ? dm_din : dm_dout;
        
   // instantiation of 5-stage pipeline CPU   
    PipelineCPU U_PipelineCPU(

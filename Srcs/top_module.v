@@ -11,7 +11,6 @@ module top_module(
 
     // 参数定义
     parameter REG_DATA_NUM = 5'd31;   // 寄存器数据数量
-    parameter ALU_DATA_NUM = 2'd3;    // ALU数据数量
     parameter DMEM_DATA_NUM = 4'd15;  // 数据存储器数据数量
 
     // 内部信号定义
@@ -24,41 +23,35 @@ module top_module(
     wire [31:0] PC_out;          // 程序计数器输出
     wire [31:0] instr;           // 当前指令
     wire [31:0] reg_data;        // 寄存器数据
-    wire [31:0] Addr_out;        // 地址输出
-    wire [31:0] Data_out;        // 数据输出
-    wire [31:0] debug_data;      // 新增：调试数据
+    wire [31:0] mem_addr_out;    // 内存访问地址输出
+    wire [31:0] mem_data_out;    // 内存访问数据输出
+    wire [31:0] debug_data;      // 调试数据
     
-    // 寄存器显示相关信号
+    // 统一显示控制信号
     reg [4:0] reg_addr;          // 寄存器地址
-    reg [31:0] reg_data_from_cpu; // 从CPU读取的寄存器数据
-
-    
-    // ALU显示相关信号
-    reg [1:0] alu_addr;          // ALU地址
-    reg [31:0] alu_disp_data;    // ALU显示数据
-    
-    // 数据存储器显示相关信号
     reg [3:0] dmem_addr;         // 数据存储器地址
-    reg [31:0] dmem_data;        // 数据存储器数据
+    reg sw3_last, sw4_last;      // 开关状态记录
     
-    // 显示相关信号
-    reg [31:0] display_data;     // 显示数据
-    reg [31:0] led_disp_data;    // LED显示数据
+    // 显示数据信号
+    reg [31:0] reg_data_from_cpu; // 从CPU读取的寄存器数据
+    reg [31:0] dmem_data;        // 数据存储器数据
+    reg [31:0] access_addr_data; // 访问地址数据
+    reg [31:0] display_data;     // 最终显示数据
 
     // 时钟分频逻辑
     always @(posedge clk or negedge rstn) begin
         if (!rstn)
             clkdiv <= 0;
         else
-            clkdiv <= clkdiv + 1'b1; // 时钟上升沿计数器加1
+            clkdiv <= clkdiv + 1'b1;
     end
 
     // 根据 sw_i[15] 控制时钟分频速率
     assign Clk_CPU = (sw_i[15]) ? clkdiv[27] : clkdiv[20];
-    assign Clk_instr = Clk_CPU & ~sw_i[1]; // CPU工作时钟与控制信号 sw_i[1] 结合,此处开关设为1时停止执行指令
+    assign Clk_instr = Clk_CPU & ~sw_i[1]; // CPU工作时钟与控制信号 sw_i[1] 结合
     
-    // 数码管独立时钟 - 使用较高频率（约1KHz）确保刷新速度足够快
-    assign Clk_display = clkdiv[16]; // 约1.5KHz刷新频率，确保肉眼看到同时显示
+    // 数码管独立时钟 - 使用较高频率确保刷新速度足够快
+    assign Clk_display = clkdiv[16];
     
     // 实例化RISC-V流水线CPU
     sccomp cpu(
@@ -68,130 +61,101 @@ module top_module(
         .reg_data(reg_data),
         .instr(instr),           // 当前指令
         .PC_out(PC_out),         // 程序计数器
-        .Addr_out(Addr_out),     // 地址输出
-        .Data_out(Data_out),     // 数据输出
-        .DMType_out(),           // 新增：可选输出
-        .debug_data(debug_data)  // 新增：调试数据输出
+        .mem_addr_out(mem_addr_out),  // 内存访问地址
+        .mem_data_out(mem_data_out),  // 内存访问数据
+        .debug_data(debug_data)  // 调试数据输出
     );
     
-
-    
-    // 寄存器数据显示逻辑
-    reg sw3_last, sw4_last;
+    // 统一显示控制逻辑 - 使用开关234控制，不受CPU时钟影响
     always @ (posedge clk or negedge rstn) begin
         if (!rstn) begin
             reg_addr <= 5'b0;
+            dmem_addr <= 4'b0;
             sw3_last <= 1'b0;
             sw4_last <= 1'b0;
         end else begin
             sw3_last <= sw_i[3];
             sw4_last <= sw_i[4];
+            
+            // 开关2：重置所有地址到0
             if (sw_i[2]) begin
                 reg_addr <= 5'b0;
-            end else if (sw_i[3] && !sw3_last) begin // sw3上升沿 +1
-                if (reg_addr == 5'd31)
+                dmem_addr <= 4'b0;
+            end 
+            // 开关3：地址递增
+            else if (sw_i[3] && !sw3_last) begin
+                // 寄存器地址递增
+                if (reg_addr == REG_DATA_NUM)
                     reg_addr <= 5'd0;
                 else
                     reg_addr <= reg_addr + 1'b1;
-            end else if (sw_i[4] && !sw4_last) begin // sw4上升沿 -1
+                
+                // 数据存储器地址递增
+                if (dmem_addr == DMEM_DATA_NUM)
+                    dmem_addr <= 4'd0;
+                else
+                    dmem_addr <= dmem_addr + 1'b1;
+            end 
+            // 开关4：地址递减
+            else if (sw_i[4] && !sw4_last) begin
+                // 寄存器地址递减
                 if (reg_addr == 5'd0)
-                    reg_addr <= 5'd31;
+                    reg_addr <= REG_DATA_NUM;
                 else
                     reg_addr <= reg_addr - 1'b1;
+                
+                // 数据存储器地址递减
+                if (dmem_addr == 4'd0)
+                    dmem_addr <= DMEM_DATA_NUM;
+                else
+                    dmem_addr <= dmem_addr - 1'b1;
             end
         end
     end
     
-    // 寄存器数据读取 - 通过sccomp模块的reg_data输出
+    // 寄存器数据读取
     always @(*) begin
         reg_data_from_cpu = reg_data;
     end
     
-    // ALU数据显示逻辑
-    always@(posedge Clk_CPU or negedge rstn) begin
-        if(!rstn) begin
-            alu_addr <= 2'b0;
-            alu_disp_data <= 32'b0;
-        end
-        else if(sw_i[12]==1'b1)  // 如果开关12为1，显示ALU数据
-        begin
-            if(alu_addr==ALU_DATA_NUM)  // 如果ALU地址已达到最大值
-                alu_addr <= 2'b0;          // 重置ALU地址为0
-            else
-            begin
-                alu_addr <= alu_addr+1'b1;  // 增加ALU地址
-            end
-        end
-    end
-    
-    // ALU数据选择 - 由于无法直接访问内部信号，我们使用可观察的信号
-    always@(*) begin
-        case(alu_addr)  // 根据ALU地址选择显示的数据
-        2'b00: alu_disp_data = PC_out;  // 显示程序计数器
-        2'b01: alu_disp_data = instr;   // 显示当前指令
-        2'b10: alu_disp_data = Addr_out; // 显示ALU结果（地址）
-        2'b11: alu_disp_data = Data_out; // 显示数据输出
-        endcase
-    end
-    
-    // 数据存储器显示逻辑
-    always@(posedge Clk_CPU or negedge rstn) begin
-        if(!rstn) begin
-            dmem_addr <= 4'b0;
-            dmem_data <= 32'b0;
-        end
-        else if(sw_i[11]==1'b1)  // 如果开关11为1，显示数据存储器数据
-        begin
-            if(dmem_addr==DMEM_DATA_NUM)  // 如果数据存储器地址已达到最大值
-                dmem_addr <= 4'b0;           // 重置数据存储器地址为0
-            else
-            begin
-                dmem_addr <= dmem_addr+1'b1;        // 增加数据存储器地址
-            end
-        end
-    end
-    
-    // 数据存储器数据 - 由于无法直接访问内部存储器，我们使用可观察的信号
+    // 数据存储器数据
     always @(*) begin
-        dmem_data = Addr_out;  // 显示地址作为数据存储器数据
+        dmem_data = mem_data_out;  // 显示内存访问数据
     end
     
-    // LED显示数据
+    // 访问地址数据 - 如果没有发生读取或写入，输出FFFFFFFF
     always @(*) begin
-        led_disp_data = PC_out;  // 显示程序计数器
+        // 检查是否有内存访问（地址不为0或者有实际的内存操作）
+        if (mem_addr_out != 32'h0 || mem_data_out != 32'h0) begin
+            access_addr_data = mem_addr_out;
+        end else begin
+            access_addr_data = 32'hFFFFFFFF;  // 没有涉及地址时输出FFFFFFFF
+        end
     end
     
-    //Choose Data
     // 根据开关输入选择显示的数据
-    always@(*) begin
-        if(sw_i[10]==1'b1) // 新增：调试显示模式
+    always @(*) begin
+        if(sw_i[10] == 1'b1) begin
+            // 调试显示模式
             display_data = debug_data;
-        else if(sw_i[0]==1'b0)
-        begin
+        end else begin
+            // 正常显示模式
             case(sw_i[14:11])
-                4'b1000: display_data = instr;
-                4'b0100: display_data = reg_data_from_cpu;
-                4'b0010: display_data = alu_disp_data;
-                4'b0001: display_data = dmem_data;
-                4'b1001: display_data = PC_out;
-                default: display_data = 32'h76543210;
+                4'b1000: display_data = instr;           // 指令
+                4'b0100: display_data = reg_data_from_cpu; // 寄存器数据
+                4'b0010: display_data = access_addr_data; // 访问地址数据
+                4'b0001: display_data = dmem_data;       // 数据存储器数据
+                4'b1001: display_data = PC_out;          // 程序计数器
+                default: display_data = PC_out;          // 默认显示PC
             endcase
         end
-        else
-        begin
-            display_data = led_disp_data;
-        end
     end
-    
-    // 七段数码管显示逻辑
-    wire [31:0] seg_data;
-    assign seg_data = display_data;  // 显示完整的32位数据
     
     // 七段数码管控制器
     seg7_controller seg7_ctrl(
         .clk(Clk_display),
         .rstn(rstn),
-        .data(seg_data),
+        .data(display_data),
         .seg(disp_seg_o),
         .an(disp_an_o)
     );
@@ -210,7 +174,7 @@ module seg7_controller(
     reg [2:0] digit_sel;
     reg [3:0] digit_data;
     
-    // 数码管选择计数器 - 使用3位计数器选择8个数字
+    // 数码管选择计数器
     always @(posedge clk or negedge rstn) begin
         if (!rstn)
             digit_sel <= 3'b000;
@@ -218,17 +182,17 @@ module seg7_controller(
             digit_sel <= digit_sel + 1;
     end
     
-    // 根据选择信号输出对应的数字 - 显示所有8个数字
+    // 根据选择信号输出对应的数字
     always @(*) begin
         case (digit_sel)
-            3'b000: digit_data = data[3:0];   // 第0位 - 最低位
+            3'b000: digit_data = data[3:0];   // 第0位
             3'b001: digit_data = data[7:4];   // 第1位
             3'b010: digit_data = data[11:8];  // 第2位
-            3'b011: digit_data = data[15:12]; // 第3位 - 最高位
+            3'b011: digit_data = data[15:12]; // 第3位
             3'b100: digit_data = data[19:16]; // 第4位
             3'b101: digit_data = data[23:20]; // 第5位
             3'b110: digit_data = data[27:24]; // 第6位
-            3'b111: digit_data = data[31:28]; // 第7位 - 最高位
+            3'b111: digit_data = data[31:28]; // 第7位
         endcase
     end
     
