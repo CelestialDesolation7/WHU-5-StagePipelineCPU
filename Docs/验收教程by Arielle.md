@@ -89,15 +89,17 @@ module PC_NPC(
             PC <= 32'h0000_0000;
         else if (!stall)
             PC <= NPC;
+        else
+            PC <= PC;
     end
       
 endmodule
 ```
 
-- 这是主要的模块，集成了PC和NPC的功能
-- NPCOp, IMM, aluout接收控制信号等和跳转指令有关的指示数据
-- 该模块以此决定将什么指令向后发送
-- 支持暂停功能，当stall=1时PC保持不变
+- 这是主要的模块，集成了PC和NPC的功能。
+- NPCOp, IMM, aluout接收控制信号等和跳转指令有关的指示数据。
+- 该模块以此决定将什么指令向后发送。
+- 当stall=1时PC保持不变。
 
 ## 实例化
 
@@ -125,26 +127,91 @@ endmodule
 
 对应理解：
 
-- 这些信号由HazardDetectionUnit生成，用于处理控制冒险
-- 检测到JAL类型指令时，说明控制冒险发生，流水线应插入空泡
-- 事实：一个指令对应的，在其全执行过程内需要用到的控制信号，由该指令的编码唯一确定
+- 这些信号由HazardDetectionUnit生成，用于处理控制冒险。
+- 检测到JAL类型指令时，说明控制冒险发生，流水线应插入空泡。
+- 事实：一个指令对应的，在其全执行过程内需要用到的控制信号，由该指令的编码唯一确定。
 - 回顾：为什么有控制冒险？
-  - 在 IF 阶段：我们不知道当前是否该跳转，先默认 `PC+4`
-  - 在 ID 阶段：解码出 `jal`，立即数 `imm` 可以拿到，跳转地址 = `PC + imm`
+  - 在 IF 阶段：我们不知道当前是否该跳转，先默认 `PC+4`。
+  - 在 ID 阶段：解码出 `jal`，立即数 `imm` 可以拿到，跳转地址 = `PC + imm`也可以立刻拿到。
   - ⚠️ 此时，**下一条指令已经被 IF 取出（PC+4 的那一条），如果 jal 真要跳，就必须丢弃这条指令**
-  - 这个"下一条指令"现在在哪？在 IF 阶段的硬件
-  - 显然，这就是我们正在设计的硬件
-  - 它要接收流水线后端的信号，并在后端汇报JAL指令时，将当前指令标记为"被丢弃"
+  - 这个"下一条指令"现在在哪？在 IF 阶段的硬件。
+  - 显然，这就是我们正在设计的硬件。
 - 对于JAL指令，跳转地址由指令本身直接可以给出
   - 如果JAL引起了跳转，那么这个JAL现在位于ID
   - 显然，我们要从流水线寄存器获得它
 - 对于JALR指令，跳转地址要由给定的寄存器和偏移量相加得到
-  - 如果JALR引起了跳转，那么这个JALR现在位于EX
-  - 显然，我们要从流水线寄存器获得它
+  - 如果JALR引起了跳转，那么这个JALR现在位于EX。
+  - 显然，我们要从流水线寄存器获得它。
+
+# IF-ID流水线寄存器
+
+```verilog
+module IF_ID_Reg(
+    input clk,
+    input rst,
+    input flush,
+    input stall,
+    input [31:0] PC_in,
+    input [31:0] instr_in,
+    output reg [31:0] PC_out,
+    output reg [31:0] instr_out
+);
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            PC_out <= 32'h0;
+            instr_out <= 32'h0;
+        end
+        else if (flush) begin
+            PC_out <= 32'h0;
+            instr_out <= 32'h0;
+        end
+        else if (!stall) begin
+            PC_out <= PC_in;
+            instr_out <= instr_in;
+        end
+    end
+endmodule
+```
+
+## 实例化
+
+```verilog
+// IF-ID流水线寄存器
+    IF_ID_Reg if_id_reg(
+        .clk(clk),
+        .rst(rst),
+        .flush(flush_IF),
+        .stall(stall_IF),
+        .PC_in(PC_IF),
+        .instr_in(instr_IF),
+        .PC_out(PC_ID),
+        .instr_out(instr_ID)
+    );
+```
+
+## 理解过程
+
+你的疑惑：
+
+1. 这个流水线寄存器在时序上的行为是如何的？
+
+对应理解：
+
+1. 在任何时刻，都正在接受IF阶段取出的指令数据作为输入，将ID阶段正在执行的指令数据作为输出。
+
+	- 事实：
+
+		- 0：在任何一个时钟周期内，流水线寄存器总是接受输入数据和输出数据。
+
+		- 1：寄存器的行为是，在当前周期内输出内部存储的值至输出口，在下个周期内将当前周期输入口的数据写到内部存储并将这个数据作为新的输出值。
+
+		- 2：此流水线寄存器的控制信号只用于管理自身状态，不向后传输。
+
+	- 结论：
+		- 0：该寄存器输出的指令数据是当前时钟周期内ID正在执行的指令。
+		- 1：该寄存器被输入的指令数据是当前时钟周期内IF刚刚取到的指令。
 
 # ID
-
-我知道按空间顺序来讲，我应该先讲IF-ID寄存器，但为了便于理解，请先看这一模块硬件。
 
 这个部分的全部硬件为：
 
@@ -266,50 +333,50 @@ endmodule
 
 	- NPCOp — Next PC Operation（跳转控制）
 
-		| 编码 (`NPCOp`) | 三位二进制 | 含义                    | 适用指令                                   |
-	|----------------|------------|-------------------------|--------------------------------------------|
-	| `000`          | `3'b000`   | 顺序执行：PC + 4        | 非跳转指令                                 |
-	| `001`          | `3'b001`   | 条件分支跳转            | `beq`, `bne`, `blt`, `bge`, `bltu`, `bgeu` |
-	| `010`          | `3'b010`   | 无条件跳转（jal）       | `jal`                                      |
-	| `100`          | `3'b100`   | 寄存器跳转（jalr）      | `jalr`                                     |
+  | 编码 (`NPCOp`) | 三位二进制 | 含义               | 适用指令                                   |
+  | -------------- | ---------- | ------------------ | ------------------------------------------ |
+  | `000`          | `3'b000`   | 顺序执行：PC + 4   | 非跳转指令                                 |
+  | `001`          | `3'b001`   | 条件分支跳转       | `beq`, `bne`, `blt`, `bge`, `bltu`, `bgeu` |
+  | `010`          | `3'b010`   | 无条件跳转（jal）  | `jal`                                      |
+  | `100`          | `3'b100`   | 寄存器跳转（jalr） | `jalr`                                     |
 
 	- EXTOp — Immediate Extension Type（立即数类型）
 	
-	  | 位号     | 含义                       | 适用指令类型 / 指令                                    |
-		| -------- | -------------------------- | ------------------------------------------------------ |
-		| EXTOp[5] | I-type 移位立即数（shamt） | `slli`, `srli`, `srai`                                 |
-		| EXTOp[4] | I-type 普通立即数          | `addi`, `slti`, `sltiu`, `xori`, `ori`, `andi`, `jalr` |
-		| EXTOp[3] | S-type 存储型立即数        | `sw`, `sh`, `sb`                                       |
-		| EXTOp[2] | B-type 分支型立即数        | `beq`, `bne`, `blt`, `bge`, `bltu`, `bgeu`             |
-		| EXTOp[1] | U-type 高位立即数          | `lui`, `auipc`                                         |
-		| EXTOp[0] | J-type 跳转立即数          | `jal`                                                  |
+   | 位号     | 含义                       | 适用指令类型 / 指令                                    |
+   | -------- | -------------------------- | ------------------------------------------------------ |
+   | EXTOp[5] | I-type 移位立即数（shamt） | `slli`, `srli`, `srai`                                 |
+   | EXTOp[4] | I-type 普通立即数          | `addi`, `slti`, `sltiu`, `xori`, `ori`, `andi`, `jalr` |
+   | EXTOp[3] | S-type 存储型立即数        | `sw`, `sh`, `sb`                                       |
+   | EXTOp[2] | B-type 分支型立即数        | `beq`, `bne`, `blt`, `bge`, `bltu`, `bgeu`             |
+   | EXTOp[1] | U-type 高位立即数          | `lui`, `auipc`                                         |
+   | EXTOp[0] | J-type 跳转立即数          | `jal`                                                  |
 
 	- WDSel — Write Data Select（寄存器写回数据来源）
-	  | 编码 (`WDSel`) | 二位二进制 | 含义                         | 适用指令       |
-	  |----------------|------------|------------------------------|----------------|
-	  | `00`           | `2'b00`    | ALU 计算结果                 | 普通算术/逻辑指令 |
-	  | `01`           | `2'b01`    | 数据存储器读取数据（DM）     | `load`         |
-	  | `10`           | `2'b10`    | 跳转返回地址（PC + 4）       | `jal`, `jalr`  |
-	  | `11`           | `2'b11`    | 保留/未定义                  | —              |
+   | 编码 (`WDSel`) | 二位二进制 | 含义                     | 适用指令          |
+   | -------------- | ---------- | ------------------------ | ----------------- |
+   | `00`           | `2'b00`    | ALU 计算结果             | 普通算术/逻辑指令 |
+   | `01`           | `2'b01`    | 数据存储器读取数据（DM） | `load`            |
+   | `10`           | `2'b10`    | 跳转返回地址（PC + 4）   | `jal`, `jalr`     |
+   | `11`           | `2'b11`    | 保留/未定义              | —                 |
 
 	
 	- ALUOp — ALU 操作选择（位掩码风格）
-	  | 位号       | 含义                                     | 典型指令                                  |
-	  |------------|------------------------------------------|-------------------------------------------|
-	  | ALUOp[4]   | 特殊类型（lui/auipc）                     | `lui`, `auipc`                            |
-	  | ALUOp[3]   | 通用运算：加、比较、逻辑（or/xor/and）   | `addi`, `slti`, `ori`, `andi`, `xor`, 等  |
-	  | ALUOp[2]   | 位移类操作                                | `slli`, `srli`, `srai`, `sll`, `srl`, `sra` |
-	  | ALUOp[1]   | 减法、比较、分支                          | `sub`, `slt`, `beq`, `bne`, `blt`, 等     |
-	  | ALUOp[0]   | 加法/地址计算类                           | `addi`, `add`, `load`, `store`, `jalr`    |
+   | 位号     | 含义                                   | 典型指令                                    |
+   | -------- | -------------------------------------- | ------------------------------------------- |
+   | ALUOp[4] | 特殊类型（lui/auipc）                  | `lui`, `auipc`                              |
+   | ALUOp[3] | 通用运算：加、比较、逻辑（or/xor/and） | `addi`, `slti`, `ori`, `andi`, `xor`, 等    |
+   | ALUOp[2] | 位移类操作                             | `slli`, `srli`, `srai`, `sll`, `srl`, `sra` |
+   | ALUOp[1] | 减法、比较、分支                       | `sub`, `slt`, `beq`, `bne`, `blt`, 等       |
+   | ALUOp[0] | 加法/地址计算类                        | `addi`, `add`, `load`, `store`, `jalr`      |
 
 	
 	- DMType — 数据存储类型（字节对齐宽度）
 	  
-    | 编码 (`DMType`) | 三位二进制 | 含义                | 典型指令             |
-    |----------------|------------|---------------------|----------------------|
-    | `000`          | `3'b000`   | word（32-bit）      | `lw`, `sw`           |
-    | `001`          | `3'b001`   | byte（8-bit）       | `lb`, `lbu`, `sb`    |
-    | `010`          | `3'b010`   | half-word（16-bit） | `lh`, `lhu`, `sh`    |
+    | 编码 (`DMType`) | 三位二进制 | 含义                | 典型指令          |
+    | --------------- | ---------- | ------------------- | ----------------- |
+    | `000`           | `3'b000`   | word（32-bit）      | `lw`, `sw`        |
+    | `001`           | `3'b001`   | byte（8-bit）       | `lb`, `lbu`, `sb` |
+    | `010`           | `3'b010`   | half-word（16-bit） | `lh`, `lhu`, `sh` |
     
   - GPRSel — 通用目的寄存器选择，在risc-v中没有意义
 
@@ -1304,84 +1371,27 @@ endmodule
 - 寄存器写使能：RegWrite信号控制是否真正写入寄存器
 - 目标寄存器：rd指定要写入的寄存器地址
 
-# IF-ID流水线寄存器
-
-```verilog
-module IF_ID_Reg(
-    input clk,
-    input rst,
-    input flush,
-    input stall,
-    input [31:0] PC_in,
-    input [31:0] instr_in,
-    output reg [31:0] PC_out,
-    output reg [31:0] instr_out
-);
-    always @(posedge clk or posedge rst) begin
-        if (rst) begin
-            PC_out <= 32'h0;
-            instr_out <= 32'h0;
-        end
-        else if (flush) begin
-            PC_out <= 32'h0;
-            instr_out <= 32'h0;
-        end
-        else if (!stall) begin
-            PC_out <= PC_in;
-            instr_out <= instr_in;
-        end
-    end
-endmodule
-```
-
-## 实例化
-
-```verilog
-// IF-ID流水线寄存器
-    IF_ID_Reg if_id_reg(
-        .clk(clk),
-        .rst(rst),
-        .flush(flush_IF),
-        .stall(stall_IF),
-        .PC_in(PC_IF),
-        .instr_in(instr_IF),
-        .PC_out(PC_ID),
-        .instr_out(instr_ID)
-    );
-```
-
-## 理解过程
-
-你的疑惑：
-
-- 流水线寄存器是如何处理暂停和清空的？
-
-对应理解：
-
-- 暂停（stall）：当stall=1时，保持当前值不变，防止新数据进入
-- 清空（flush）：当flush=1时，将输出清零，插入气泡
-- 正常传递：当stall=0且flush=0时，正常传递输入到输出
-- 优先级：rst > flush > stall > 正常传递
+- 
 
 # 总结
 
 ## 流水线阶段总结
 
-| 阶段 | 主要功能 | 关键模块 | 控制信号 |
-|------|----------|----------|----------|
-| IF | 取指令 | PC_NPC | NPCOp, stall_IF |
-| ID | 指令解码 | CTRL, RF, EXT, HazardDetectionUnit, ForwardingUnit | RegWrite, MemWrite, ALUOp, forward_rs1_ID, forward_rs2_ID |
-| EX | 执行 | ALU, ForwardingUnit | ALUSrc, forward_rs1_EX, forward_rs2_EX |
-| MEM | 存储器访问 | dm | MemRead, MemWrite, DMType |
-| WB | 写回 | - | WDSel, RegWrite |
+| 阶段 | 主要功能   | 关键模块                                           | 控制信号                                                  |
+| ---- | ---------- | -------------------------------------------------- | --------------------------------------------------------- |
+| IF   | 取指令     | PC_NPC                                             | NPCOp, stall_IF                                           |
+| ID   | 指令解码   | CTRL, RF, EXT, HazardDetectionUnit, ForwardingUnit | RegWrite, MemWrite, ALUOp, forward_rs1_ID, forward_rs2_ID |
+| EX   | 执行       | ALU, ForwardingUnit                                | ALUSrc, forward_rs1_EX, forward_rs2_EX                    |
+| MEM  | 存储器访问 | dm                                                 | MemRead, MemWrite, DMType                                 |
+| WB   | 写回       | -                                                  | WDSel, RegWrite                                           |
 
 ## 冒险处理总结
 
-| 冒险类型 | 检测单元 | 处理方法 | 影响阶段 |
-|----------|----------|----------|----------|
-| 数据冒险 | ForwardingUnit | 前递 | EX, ID |
+| 冒险类型     | 检测单元            | 处理方法  | 影响阶段   |
+| ------------ | ------------------- | --------- | ---------- |
+| 数据冒险     | ForwardingUnit      | 前递      | EX, ID     |
 | Load-Use冒险 | HazardDetectionUnit | 暂停+前递 | IF, ID, EX |
-| 控制冒险 | HazardDetectionUnit | 清空 | IF, ID, EX |
+| 控制冒险     | HazardDetectionUnit | 清空      | IF, ID, EX |
 
 ## 关键设计要点
 
