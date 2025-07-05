@@ -90,6 +90,9 @@ MyPipelineCPU/
 		- 右键点击"Sources"窗口
 		- 选择"Add Sources" → "Add or create simulation sources"
 		- 添加`Test/sccomp_rom_testbench.v`
+		- 右键点击sccomp_rom_testbench.v，选择"Set as Top"
+		- 点击左侧导航栏中的"Run Simulation" → "Run Behavioral Simulation"
+		- 如果一切顺利，您应该会看到仿真结果喵。
 4. 生成位流并下板运行喵：
 	- 点击"Run Synthesis"
 	- 综合完成后，点击"Run Implementation"
