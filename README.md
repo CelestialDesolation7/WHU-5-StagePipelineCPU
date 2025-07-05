@@ -32,9 +32,10 @@ MyPipelineCPU/
 │   ├── pipeline_regs.v           # 流水线寄存器模块
 │   ├── RF.v                      # 寄存器文件
 │   ├── sccomp.v                  # CPU系统顶层
-│   └── top_module.v              # FPGA顶层模块
+│   ├── top_module.v              # FPGA顶层模块
+│   └── dm_32bit.v                # 32位地址空间数据存储器（未使用）
 ├── Test/                         # 测试文件
-│   ├── simple_dump.py            # 简单数据导出脚本
+│   ├── simple_dump.py            # 简单反汇编脚本
 │   ├── riscv-studentnosorting.coe # 指令存储器初始化文件
 │   ├── Venus.txt                 # Venus模拟器输出
 │   └── disasm_output.txt         # 反汇编输出
@@ -49,6 +50,7 @@ MyPipelineCPU/
 └── README.md                     # 项目说明文档
 ```
 要将这个项目描述的CPU在您的电脑上运行起来，您可以直接在Release中下载已经编译好的bit文件，然后烧录到您的FPGA开发板上喵。
+
 如果您希望在您的电脑上从头运行这个项目，您需要执行以下步骤喵：
 
 1. 将仓库克隆到本地喵：
@@ -87,7 +89,7 @@ MyPipelineCPU/
 	- 添加测试文件（可选）
 		- 右键点击"Sources"窗口
 		- 选择"Add Sources" → "Add or create simulation sources"
-		- 添加`Test/vivado_testbench.v`
+		- 添加`Test/sccomp_rom_testbench.v`
 4. 生成位流并下板运行喵：
 	- 点击"Run Synthesis"
 	- 综合完成后，点击"Run Implementation"
@@ -143,7 +145,9 @@ MyPipelineCPU/
 ## 32位地址空间内存实现指南
 
 ⚠警告：此项目默认使用dm.v作为内存，仅支持7位字地址，即9位字节地址，合计512Byte喵⚠
+
 如果你的测试程序需要访问32位地址空间，请看本文最后的教程喵
+
 （Arielle的测试程序没有用到这么大的地址喵）
 
 在FPGA中实现32位地址空间（4GB）的内存时，不能简单地在Verilog中分配如此大量的寄存器，因为这会消耗巨大的硬件资源。
