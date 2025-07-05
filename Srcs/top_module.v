@@ -77,38 +77,48 @@ module top_module(
             sw3_last <= sw_i[3];
             sw4_last <= sw_i[4];
             
-            // 开关2：重置所有地址到0
-            if (sw_i[2]) begin
-                reg_addr <= 5'b0;
-                dmem_addr <= 4'b0;
+            // 新模式：sw_i[0]为1时，使用开关2~6作为地址选择
+            if (sw_i[0]) begin
+                // 使用开关2~6作为寄存器地址（5位，范围0~31）
+                reg_addr <= sw_i[6:2];
+                // 使用开关2~5作为数据存储器地址（4位，范围0~15）
+                dmem_addr <= sw_i[5:2];
             end 
-            // 开关3：地址递增
-            else if (sw_i[3] && !sw3_last) begin
-                // 寄存器地址递增
-                if (reg_addr == REG_DATA_NUM)
-                    reg_addr <= 5'd0;
-                else
-                    reg_addr <= reg_addr + 1'b1;
-                
-                // 数据存储器地址递增
-                if (dmem_addr == DMEM_DATA_NUM)
-                    dmem_addr <= 4'd0;
-                else
-                    dmem_addr <= dmem_addr + 1'b1;
-            end 
-            // 开关4：地址递减
-            else if (sw_i[4] && !sw4_last) begin
-                // 寄存器地址递减
-                if (reg_addr == 5'd0)
-                    reg_addr <= REG_DATA_NUM;
-                else
-                    reg_addr <= reg_addr - 1'b1;
-                
-                // 数据存储器地址递减
-                if (dmem_addr == 4'd0)
-                    dmem_addr <= DMEM_DATA_NUM;
-                else
-                    dmem_addr <= dmem_addr - 1'b1;
+            // 原有模式：sw_i[0]为0时，使用按钮控制逻辑
+            else begin
+                // 开关2：重置所有地址到0
+                if (sw_i[2]) begin
+                    reg_addr <= 5'b0;
+                    dmem_addr <= 4'b0;
+                end 
+                // 开关3：地址递增
+                else if (sw_i[3] && !sw3_last) begin
+                    // 寄存器地址递增
+                    if (reg_addr == REG_DATA_NUM)
+                        reg_addr <= 5'd0;
+                    else
+                        reg_addr <= reg_addr + 1'b1;
+                    
+                    // 数据存储器地址递增
+                    if (dmem_addr == DMEM_DATA_NUM)
+                        dmem_addr <= 4'd0;
+                    else
+                        dmem_addr <= dmem_addr + 1'b1;
+                end 
+                // 开关4：地址递减
+                else if (sw_i[4] && !sw4_last) begin
+                    // 寄存器地址递减
+                    if (reg_addr == 5'd0)
+                        reg_addr <= REG_DATA_NUM;
+                    else
+                        reg_addr <= reg_addr - 1'b1;
+                    
+                    // 数据存储器地址递减
+                    if (dmem_addr == 4'd0)
+                        dmem_addr <= DMEM_DATA_NUM;
+                    else
+                        dmem_addr <= dmem_addr - 1'b1;
+                end
             end
         end
     end
